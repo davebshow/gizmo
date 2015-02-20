@@ -103,5 +103,5 @@ class GremlinClient(object):
         self.loop.run_until_complete(func)
 
 
-c = GremlinClient()
-# r = c.execute("g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
+# gc = GremlinClient('ws://localhost:8182/')
+# gc.execute("g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
