@@ -3,6 +3,7 @@
 Basic examples:
 
 ```python
+>>> from gizmo import GremlinClient
 >>> gc = GremlinClient('ws://localhost:8182/')
 >>> gc.execute("g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
 
