@@ -1,6 +1,7 @@
 import asyncio
 import json
 import uuid
+from functools import partial
 import websockets
 
 
@@ -11,7 +12,7 @@ class GremlinClient(object):
         self.loop = asyncio.get_event_loop()
         self._rows = []
         self._rownumber = 0
-        self._sock = None
+        self._sock = asyncio.async(self.connect())
         self._messages = []
 
     def get_rows(self):
@@ -52,7 +53,7 @@ class GremlinClient(object):
 
     @asyncio.coroutine
     def send(self, gremlin, bindings=None, lang="gremlin-groovy", op="eval",
-             processor="", consumer=None, stream=False):
+             processor=""):
         payload = {
             "requestId": str(uuid.uuid4()),
             "op": op,
@@ -63,14 +64,15 @@ class GremlinClient(object):
                 "language":  lang
             }
         }
-        websocket = self.sock
-        if websocket is None or not websocket.open:
-            websocket = yield from self.connect()
-        try:
-            yield from websocket.send(json.dumps(payload))
-        except TypeError:
-            websocket.__next__()
-            yield from websocket.send(json.dumps(payload))
+        websocket = yield from self.sock
+        yield from websocket.send(json.dumps(payload))
+        return websocket
+
+    @asyncio.coroutine
+    def receive(self, gremlin, bindings=None, lang="gremlin-groovy", op="eval",
+                processor="", consumer=None, stream=False):
+        websocket = yield from self.send(gremlin, bindings=bindings, lang=lang,
+                                         op=op, processor=processor)
         while True:
             message = yield from websocket.recv()
             message_json = json.loads(message)
@@ -94,8 +96,9 @@ class GremlinClient(object):
     def execute(self, gremlin, bindings=None, lang="gremlin-groovy", op="eval",
                 processor="", consumer=None, stream=False):
         self.run_until_complete(
-            self.send(gremlin, bindings=bindings, lang=lang, op=op,
-                      processor=processor, consumer=consumer, stream=stream)
+            self.receive(gremlin, bindings=bindings, lang=lang,
+                         op=op, processor=processor, consumer=consumer,
+                         stream=stream)
         )
         return self
 
@@ -103,5 +106,5 @@ class GremlinClient(object):
         self.loop.run_until_complete(func)
 
 
-# gc = GremlinClient('ws://localhost:8182/')
-# gc.execute("g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
+gc = GremlinClient('ws://localhost:8182/')
+gc.execute("g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
