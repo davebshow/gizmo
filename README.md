@@ -1,7 +1,14 @@
 **gizmo** is a **Python 3** driver for the the TP3 Gremlin Server. This module is built on [asyncio](https://docs.python.org/3/library/asyncio.html) and [websockets](http://aaugustin.github.io/websockets/).
 
-Basic examples:
+Minimal example:
 
+
+Fire up the Gremlin-Server.
+```bash
+$ ./bin/gremlin-server.sh conf/gremlin-server-modern.yaml
+```
+
+Use websockets to submit Gremlin scripts to the server and receive the results.
 ```python
 >>> from gizmo import GremlinClient
 >>> gc = GremlinClient('ws://localhost:8182/')
