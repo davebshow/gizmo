@@ -17,24 +17,26 @@ The AsyncGremlinClient uses asyncio and websockets to communicate asynchronously
 # Create a websocket connection.
 >>> gc = AsyncGremlinClient('ws://localhost:8182/')
 
+# Define a consumer to use in the examples. This is mapped to the response
+# messages from server as they arrive.
+>>> consumer = lambda x: print(x["result"]["data"])
+
 # Create a task by passing a coroutine and its parameters as args and kwargs.
 # In this case, send_receive is a method that submits a gremlin script to the
 # server and stores the responses on the client object in a message queue.
->>> task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
+>>> task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1}, consumer=consumer)
 
 # Run the event loop until the task is complete.
 >>> gc.run_until_complete(task)
 
-# {'result': {'data': [{'type': 'vertex', 'label': 'software', 'properties': {'name': [{'value': 'lop', 'properties': {}, 'id': 4}], 'lang': [{'value': 'java', 'properties': {}, 'id': 5}]}, 'id': 3}, {'type': 'vertex', 'label': 'person', 'properties': {'name': [{'value': 'vadas', 'properties': {}, 'id': 2}], 'age': [{'value': 27, 'properties': {}, 'id': 3}]}, 'id': 2}, {'type': 'vertex', 'label': 'person', 'properties': {'name': [{'value': 'josh', 'properties': {}, 'id': 6}], 'age': [{'value': 32, 'properties': {}, 'id': 7}]}, 'id': 4}], 'meta': {}}, 'status': {'message': '', 'attributes': {}, 'code': 200}, 'requestId': 'c9c40072-a1c7-4392-a5b9-7b69dd718a9a'}
+#[{'id': 3, 'type': 'vertex', 'properties': {'lang': [{'id': 5, 'value': 'java', 'properties': {}}], 'name': [{'id': 4, 'value': 'lop', 'properties': {}}]}, 'label': 'software'}, {'id': 2, 'type': 'vertex', 'properties': {'name': [{'id': 2, 'value': 'vadas', 'properties': {}}], 'age': [{'id': 3, 'value': 27, 'properties': {}}]}, 'label': 'person'}, {'id': 4, 'type': 'vertex', 'properties': {'name': [{'id': 6, 'value': 'josh', 'properties': {}}], 'age': [{'id': 7, 'value': 32, 'properties': {}}]}, 'label': 'person'}]
+
 
 ```
 
 We can also use some typical patterns from asyncio to interact with the tasks and the event loop:
 
 ```python
-# Define a consumer to use in the examples.
->>> consumer = lambda x: print(x["result"]["data"])
-
 # Create a task.
 >>> task = gc.task(gc.send_receive, "g.V().values(name)", bindings={"name": "name"}, consumer=consumer)
 
@@ -64,7 +66,7 @@ consumer = lambda x: print(x["result"]["data"])
 >>> gc.add_task(superslow)
 
 # Now the fast task.
->>> gc.add_task(gc.send_receive, "g.V().values(name)", bindings={"name": "name"}, consumer=consumer)
+>>> gc.add_task(gc.send_receive, "g.V().values(n)", bindings={"n": "name"}, consumer=consumer)
 
 # This runs all the declared tasks.
 >>> gc.run_tasks()
@@ -82,7 +84,7 @@ As the above example demonstrates, AsyncGremlinClient is made to be interoperabl
 @asyncio.coroutine
 def client_consumer(gc):
     yield from superslow()
-    yield from gc.task(gc.send_receive, "g.V().values(name)", bindings={"name": "name"})
+    yield from gc.task(gc.send_receive, "g.V().values(n)", bindings={"n": "name"})
     # Response messages sent by server are stored in an asyncio.Queue
     while not gc.messages.empty():
         f = yield from gc.messages.get()
@@ -126,4 +128,3 @@ Use websockets to submit Gremlin scripts to the server and receive the results. 
 # {'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': 'ab51311f-d532-401a-9f4b-df6434765bd3', 'status': {'code': 200, 'message': '', 'attributes': {}}}
 
 ```
-**AsyncGremlinClient** coming soon!!!

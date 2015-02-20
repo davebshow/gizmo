@@ -187,7 +187,8 @@ class AsyncGremlinClient(BaseGremlinClient):
 # #Basic Async Examples
 #
 # gc = AsyncGremlinClient('ws://localhost:8182/')
-# task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
+# consumer = lambda x: print(x["result"]["data"])
+# task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1}, consumer=consumer)
 # # task = asyncio.async(gc.send_receive("g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x)))
 # gc.run_until_complete(task)
 
