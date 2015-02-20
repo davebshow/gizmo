@@ -1,4 +1,4 @@
-**gizmo** is a Python driver for the the TP3 Gremlin Server. This module requires [asyncio](https://docs.python.org/3/library/asyncio.html), so it only works with **Python 3.4+**
+**gizmo** is a **Python 3** driver for the the TP3 Gremlin Server. This module is built on [asyncio](https://docs.python.org/3/library/asyncio.html) and [websockets](http://aaugustin.github.io/websockets/).
 
 Basic examples:
 
