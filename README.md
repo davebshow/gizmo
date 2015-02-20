@@ -61,9 +61,6 @@ def superslow():
     print("superslow")
 
 
-gc = AsyncGremlinClient('ws://localhost:8182/')
-consumer = lambda x: print(x["result"]["data"])
-
 # Submit the slow task first.
 >>> gc.add_task(superslow)
 
@@ -85,20 +82,17 @@ As the above example demonstrates, AsyncGremlinClient is made to be interoperabl
 
 # Define a coroutine that sequentially executes instructions.
 @asyncio.coroutine
-def client_consumer(gc):
+def client(gc):
     yield from superslow()
-    yield from gc.task(
-        gc.send_receive,
-        "g.V().values(n)",
-        bindings={"n": "name"}
-    )
+    yield from gc.task(gc.send_receive, "g.V().values(n)",
+                       bindings={"n": "name"}, consumer=consumer)
     # Response messages sent by server are stored in an asyncio.Queue
     while not gc.messages.empty():
         f = yield from gc.messages.get()
         print(f)
 
 >>> gc = AsyncGremlinClient('ws://localhost:8182/')
->>> gc.run_until_complete(client_consumer(gc))
+>>> gc.run_until_complete(client(gc))
 
 # superslow
 # ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
@@ -111,7 +105,8 @@ gizmo handles its own event loop internally, but if you want to use a different 
 
 >>> loop = asyncio.get_event_loop()
 >>> gc = AsyncGremlinClient('ws://localhost:8182/', loop=loop)
->>> task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1}, consumer=consumer)
+>>> task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1},
+                   consumer=consumer)
 >>> loop.run_until_complete(task)
 
 # [{'id': 3, 'type': 'vertex', 'label': 'software', 'properties': {'lang': [{'id': 5, 'value': 'java', 'properties': {}}], 'name': [{'id': 4, 'value': 'lop', 'properties': {}}]}}, {'id': 2, 'type': 'vertex', 'label': 'person', 'properties': {'age': [{'id': 3, 'value': 27, 'properties': {}}], 'name': [{'id': 2, 'value': 'vadas', 'properties': {}}]}}, {'id': 4, 'type': 'vertex', 'label': 'person', 'properties': {'age': [{'id': 7, 'value': 32, 'properties': {}}], 'name': [{'id': 6, 'value': 'josh', 'properties': {}}]}}]
