@@ -24,7 +24,8 @@ The AsyncGremlinClient uses asyncio and websockets to communicate asynchronously
 # Create a task by passing a coroutine and its parameters as args and kwargs.
 # In this case, send_receive is a method that submits a gremlin script to the
 # server and stores the responses on the client object in a message queue.
->>> task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1}, consumer=consumer)
+>>> task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1},
+                   consumer=consumer)
 
 # Run the event loop until the task is complete.
 >>> gc.run_until_complete(task)
@@ -38,7 +39,8 @@ We can also use some typical patterns from asyncio to interact with the tasks an
 
 ```python
 # Create a task.
->>> task = gc.task(gc.send_receive, "g.V().values(name)", bindings={"name": "name"}, consumer=consumer)
+>>> task = gc.task(gc.send_receive, "g.V().values(n)", bindings={"n": "name"},
+                   consumer=consumer)
 
 # Add a callback to execute when the task is complete, in this case stop the event loop.
 >>> task.add_done_callback(gc.stop)
@@ -66,7 +68,8 @@ consumer = lambda x: print(x["result"]["data"])
 >>> gc.add_task(superslow)
 
 # Now the fast task.
->>> gc.add_task(gc.send_receive, "g.V().values(n)", bindings={"n": "name"}, consumer=consumer)
+>>> gc.add_task(gc.send_receive, "g.V().values(n)", bindings={"n": "name"},
+                consumer=consumer)
 
 # This runs all the declared tasks.
 >>> gc.run_tasks()
@@ -84,7 +87,11 @@ As the above example demonstrates, AsyncGremlinClient is made to be interoperabl
 @asyncio.coroutine
 def client_consumer(gc):
     yield from superslow()
-    yield from gc.task(gc.send_receive, "g.V().values(n)", bindings={"n": "name"})
+    yield from gc.task(
+        gc.send_receive,
+        "g.V().values(n)",
+        bindings={"n": "name"}
+    )
     # Response messages sent by server are stored in an asyncio.Queue
     while not gc.messages.empty():
         f = yield from gc.messages.get()
