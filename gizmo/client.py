@@ -69,10 +69,7 @@ class GremlinClient(object):
         return websocket
 
     @asyncio.coroutine
-    def receive(self, gremlin, bindings=None, lang="gremlin-groovy", op="eval",
-                processor="", consumer=None, stream=False):
-        websocket = yield from self.send(gremlin, bindings=bindings, lang=lang,
-                                         op=op, processor=processor)
+    def receive(self, websocket, consumer=None, stream=False):
         while True:
             message = yield from websocket.recv()
             message_json = json.loads(message)
@@ -93,10 +90,17 @@ class GremlinClient(object):
                 self._messages.append(verbose)
                 print(verbose)
 
+    @asyncio.coroutine
+    def _execute(self, gremlin, bindings=None, lang="gremlin-groovy", op="eval",
+                 processor="", consumer=None, stream=False):
+        websocket = yield from self.send(gremlin, bindings=bindings, lang=lang,
+                                         op=op, processor=processor)
+        yield from self.receive(websocket, consumer=consumer, stream=stream)
+
     def execute(self, gremlin, bindings=None, lang="gremlin-groovy", op="eval",
                 processor="", consumer=None, stream=False):
         self.run_until_complete(
-            self.receive(gremlin, bindings=bindings, lang=lang,
+            self._execute(gremlin, bindings=bindings, lang=lang,
                          op=op, processor=processor, consumer=consumer,
                          stream=stream)
         )
