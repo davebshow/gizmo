@@ -175,10 +175,11 @@ Use **gizmo** with [Tornado](http://tornado.readthedocs.org/en/latest/index.html
 ```python
 import asyncio
 import json
-from gizmo import AsyncGremlinClient
-from tornado import gen
+from tornado import escape, gen
 from tornado.web import RequestHandler, Application, url
 from tornado.platform.asyncio import AsyncIOMainLoop
+
+from gizmo import AsyncGremlinClient
 
 
 class GremlinHandler(RequestHandler):
@@ -202,15 +203,15 @@ def make_app():
 
 def main():
     app = make_app()
-    app.listen(8888)
+    # Must create IOLoop before calling app.listen.
     AsyncIOMainLoop().install()
-    asyncio.get_event_loop().loop.run_forever()
+    app.listen(8888)
+    asyncio.get_event_loop().run_forever()
 
 
 if __name__ == '__main__':
     print("Starting server at http://localhost:8888/")
     main()
-
 ```
 
 ## GremlinClient
