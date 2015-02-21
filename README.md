@@ -121,6 +121,7 @@ def slowjson(p):
 def client(gc, f):
     p = partial(on_chunks, f=f)
     yield from slowjson(p)
+    yield from gc.receive(consumer=p, collect=False)
     yield from gc.send("g.V(x).out()", bindings={"x":1})
     yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
     if gc.messages.empty():
