@@ -118,9 +118,7 @@ def client(gc):
 >>> gc.run_until_complete(client(gc))
 ```
 
-**gizmo** handles its own event loop internally, but if you want to use a different event loop, just pass it to the constructor.
-
-Now it is up to you to explore to explore Gremlin and the different ways you can use asyncio and gizmo to interact with the Gremlin Server :D!
+Now it is up to you to explore to explore Gremlin and the different ways you can use asyncio and **gizmo** to interact with the Gremlin Server :D!
 
 ```python
 from functools import partial
@@ -132,28 +130,25 @@ def on_chunk(chunk, f):
 
 
 @asyncio.coroutine
-def slowjson(p):
+def slowjson(gc):
     yield from asyncio.sleep(5)
-    yield from gc.send("g.V().values(n)", bindings={"n": "name"},
-                       consumer=p)
+    yield from gc.send("g.V().values(n)", bindings={"n": "name"})
 
 
 @asyncio.coroutine
-def client(gc, f):
-    p = partial(on_chunk, f=f)
-    yield from slowjson(p)
-    yield from gc.receive(consumer=p, collect=False)
-    yield from gc.send("g.V(x).out()", bindings={"x":1})
-    yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
-    if gc.messages.empty():
-        print("No messages")
+def client():
+    gc = AsyncGremlinClient('ws://localhost:8182/')
+    with open("testfile.txt", "w") as f:
+        p = partial(on_chunk, f=f)
+        yield from slowjson(gc)
+        yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
+        yield from gc.send("g.V(x).out()", bindings={"x":1})
+        yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
+        if gc.messages.empty():
+            print("No messages collected.")
 
 
->>> loop = asyncio.get_event_loop()
->>> gc = AsyncGremlinClient('ws://localhost:8182/', loop=loop)
->>> f = open("testfile.txt", "w")
->>> loop.run_until_complete(client(gc, f))
->>> f.close()
+asyncio.get_event_loop().run_until_complete(client())
 ```
 
 Here's the output:
