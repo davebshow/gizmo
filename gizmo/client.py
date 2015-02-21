@@ -63,6 +63,79 @@ class BaseGremlinClient(object):
         self.loop.run_until_complete(func)
 
 
+class AsyncGremlinClient(BaseGremlinClient):
+
+    def __init__(self, uri='ws://localhost:8182/', loop=None):
+        super().__init__(uri=uri, loop=loop)
+        self.messages = asyncio.Queue()
+        self._tasks = []
+        self.task_queue = asyncio.Queue()
+
+    def get_tasks(self):
+        return self._tasks
+    tasks = property(get_tasks)
+
+    def task(self, coroutine, *args, **kwargs):
+        return asyncio.async(coroutine(*args, **kwargs))
+
+    def add_task(self, coroutine, *args, **kwargs):
+        task = self.task(coroutine, *args, **kwargs)
+        self._tasks.append(task)
+        return task
+
+    def reset_messages():
+        self.messages = asyncio.Queue()
+
+    @asyncio.coroutine
+    def enqueue_task(self, coroutine, *args, **kwargs):
+        task = (coroutine, args, kwargs)
+        yield from self.task_queue.put(task)
+
+    @asyncio.coroutine
+    def dequeue_all(self, consumer=None):
+        while not self.task_queue.empty():
+            cor, args, kwargs = yield from self.task_queue.get()
+            task = self.task(cor, *args, **kwargs)
+            f = yield from task
+            if consumer:
+                consumer(f)
+
+    @asyncio.coroutine
+    def receive(self, consumer=None, collect=True):
+        websocket = self.sock
+        while True:
+            # Will need to handle error here if websocket no message has been
+            # sent.
+            message = yield from websocket.recv()
+            message = json.loads(message)
+            code = message["status"]["code"]
+            # import ipdb; ipdb.set_trace()
+            if code == 200:
+                if consumer:
+                    message = consumer(message)
+                if message:
+                    yield from self.messages.put(message)
+            elif code == 299:
+                break
+            else:
+                # Error handler here.
+                message = message["status"]["message"]
+                verbose = "Request {} failed with status code {}: {}".format(
+                    payload["requestId"], code, message
+                )
+                self._errors.append(verbose)
+                print(verbose)
+
+    def run_tasks(self):
+        self.run_until_complete(asyncio.wait(self.tasks))
+
+    def run_forever(self):
+        self.loop.run_forever()
+
+    def stop(self, f=None):
+        self.loop.stop()
+
+
 class GremlinClient(BaseGremlinClient):
 
     def __init__(self, uri='ws://localhost:8182/', loop=None):
@@ -122,114 +195,3 @@ class GremlinClient(BaseGremlinClient):
                               collect=collect)
         )
         return self
-
-
-class AsyncGremlinClient(BaseGremlinClient):
-
-    def __init__(self, uri='ws://localhost:8182/', loop=None):
-        super().__init__(uri=uri, loop=loop)
-        self.messages = asyncio.Queue()
-        self._tasks = []
-
-    def get_tasks(self):
-        return self._tasks
-    tasks = property(get_tasks)
-
-    def task(self, coroutine, *args, **kwargs):
-        return asyncio.async(coroutine(*args, **kwargs))
-
-    def add_task(self, coroutine, *args, **kwargs):
-        task = self.task(coroutine, *args, **kwargs)
-        self._tasks.append(task)
-        return task
-
-    def reset_messages():
-        self.messages = asyncio.Queue()
-
-    @asyncio.coroutine
-    def receive(self, consumer=None, collect=True):
-        websocket = self.sock
-        while True:
-            # Will need to handle error here if websocket no message has been
-            # sent.
-            message = yield from websocket.recv()
-            message = json.loads(message)
-            code = message["status"]["code"]
-            if code == 200:
-                if consumer:
-                    message = consumer(message)
-                if message:
-                    yield from self.messages.put(message)
-            elif code == 299:
-                break
-            else:
-                # Error handler here.
-                message = message["status"]["message"]
-                verbose = "Request {} failed with status code {}: {}".format(
-                    payload["requestId"], code, message
-                )
-                self._errors.append(verbose)
-                print(verbose)
-
-    def run_tasks(self):
-        self.run_until_complete(asyncio.wait(self.tasks))
-
-    def run_forever(self):
-        self.loop.run_forever()
-
-    def stop(self, f=None):
-        self.loop.stop()
-
-
-# gc = GremlinClient('ws://localhost:8182/')
-# gc.execute("g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
-#
-# #Basic Async Examples
-#
-# gc = AsyncGremlinClient('ws://localhost:8182/')
-# consumer = lambda x: print(x["result"]["data"])
-# task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1}, consumer=consumer)
-# # task = asyncio.async(gc.send_receive("g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x)))
-# gc.run_until_complete(task)
-
-# @asyncio.coroutine
-# def superslow():
-#     yield from asyncio.sleep(5)
-#     print("superslow")
-#
-#
-# gc = AsyncGremlinClient('ws://localhost:8182/')
-# consumer = lambda x: print(x["result"]["data"])
-# gc.add_task(superslow)
-# gc.add_task(gc.send_receive, "g.V().values(name)", bindings={"name": "name"}, consumer=consumer)
-# gc.run_tasks()
-#
-# task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
-# task.add_done_callback(gc.stop)
-# # Run the event loop until the task is complete.
-# gc.run_forever()
-
-
-#
-# Define a coroutine that sequentially executes instructions.
-# @asyncio.coroutine
-# def client_consumer(gc):
-#     yield from superslow()
-#     yield from gc.task(
-#         gc.send_receive,
-#         "g.V().values(name)",
-#         bindings={"name": "name"},
-#         consumer=consumer
-#     )
-#     # Response messages sent by server are stored in an asyncio.Queue
-#     while not gc.messages.empty():
-#         f = yield from gc.messages.get()
-#         print(f)
-# #
-# # gc = AsyncGremlinClient('ws://localhost:8182/')
-# # gc.run_until_complete(client_consumer(gc))
-#
-# loop = asyncio.get_event_loop()
-# gc = AsyncGremlinClient('ws://localhost:8182/', loop=loop)
-# task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1}, consumer=consumer)
-# loop.run_until_complete(task)

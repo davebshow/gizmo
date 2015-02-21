@@ -78,6 +78,9 @@ def superslow():
 As the above example demonstrates, AsyncGremlinClient is made to be interoperable with asyncio. Here is an example that uses asyncio to create synchronous communication with the Gremlin Server.
 
 ```python
+# This consumer actually returns a value to the message queue.
+>>> consumer = lambda x: print(x["result"]["data"])
+
 # Define a coroutine that sequentially executes instructions.
 @asyncio.coroutine
 def client(gc):
@@ -97,6 +100,24 @@ def client(gc):
 
 ```
 
+Alternatively, you can use the AsyncGremlinClient task queue to enqueue and dequeue tasks. Tasks are executed as they are dequeued.
+
+```python
+@asyncio.coroutine
+def client(gc):
+    yield from gc.enqueue_task(superslow)
+    yield from gc.enqueue_task(
+        gc.send_receive,
+        "g.V().values(name)",
+        bindings={"name": "name"},
+        consumer=consumer
+    )
+    yield from gc.dequeue_all(consumer=consumer)
+
+
+>>> gc.run_until_complete(client(gc))
+```
+
 **gizmo** handles its own event loop internally, but if you want to use a different event loop, just pass it to the constructor.
 
 Now it is up to you to explore to explore Gremlin and the different ways you can use asyncio and gizmo to interact with the Gremlin Server :D!
@@ -105,7 +126,7 @@ Now it is up to you to explore to explore Gremlin and the different ways you can
 from functools import partial
 
 
-def on_chunks(chunk, f):
+def on_chunk(chunk, f):
     chunk = chunk["result"]["data"]
     f.write(json.dumps(chunk) + '\n')
 
@@ -119,7 +140,7 @@ def slowjson(p):
 
 @asyncio.coroutine
 def client(gc, f):
-    p = partial(on_chunks, f=f)
+    p = partial(on_chunk, f=f)
     yield from slowjson(p)
     yield from gc.receive(consumer=p, collect=False)
     yield from gc.send("g.V(x).out()", bindings={"x":1})
@@ -145,6 +166,54 @@ Here's the output:
 # ["marko", "vadas", "lop", "josh", "ripple", "peter"]
 
 # [{"id": 3, "label": "software", "properties": {"lang": [{"id": 5, "value": "java", "properties": {}}], "name": [{"id": 4, "value": "lop", "properties": {}}]}, "type": "vertex"}, {"id": 2, "label": "person", "properties": {"age": [{"id": 3, "value": 27, "properties": {}}], "name": [{"id": 2, "value": "vadas", "properties": {}}]}, "type": "vertex"}, {"id": 4, "label": "person", "properties": {"age": [{"id": 7, "value": 32, "properties": {}}], "name": [{"id": 6, "value": "josh", "properties": {}}]}, "type": "vertex"}]
+```
+
+## Tornado Interoperability Example
+
+Use **gizmo** with [Tornado](http://tornado.readthedocs.org/en/latest/index.html):
+
+```python
+import asyncio
+import json
+from tornado import escape, gen
+from tornado.web import RequestHandler, Application, url
+from tornado.platform.asyncio import AsyncIOMainLoop, to_tornado_future
+
+from gizmo import AsyncGremlinClient
+
+
+class GremlinHandler(RequestHandler):
+    @gen.coroutine
+    def get(self):
+        gc = AsyncGremlinClient(uri='ws://localhost:8182/', loop=loop)
+        consumer = lambda x: x["result"]["data"]
+        yield from gc.task(gc.send_receive, "g.V().values(n)",
+                           bindings={"n": "name"}, consumer=consumer)
+        while not gc.messages.empty():
+            message = yield from gc.messages.get()
+            message = json.dumps(message)
+            self.write(message)
+
+
+def make_app():
+    return Application([
+        url(r"/", GremlinHandler),
+    ])
+
+
+AsyncIOMainLoop().install()
+loop = asyncio.get_event_loop()
+
+
+def main():
+    app = make_app()
+    app.listen(8888)
+    loop.run_forever()
+
+
+if __name__ == '__main__':
+    main()
+
 ```
 
 ## GremlinClient
