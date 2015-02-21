@@ -138,7 +138,7 @@ class AsyncGremlinClient(BaseGremlinClient):
 
 class GremlinClient(BaseGremlinClient):
 
-        def __init__(self, uri='ws://localhost:8182/', loop=None):
+    def __init__(self, uri='ws://localhost:8182/', loop=None):
         super().__init__(uri=uri, loop=loop)
         self._messages = []
         self._message_number = 0

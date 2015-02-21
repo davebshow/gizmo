@@ -175,17 +175,16 @@ Use **gizmo** with [Tornado](http://tornado.readthedocs.org/en/latest/index.html
 ```python
 import asyncio
 import json
+from gizmo import AsyncGremlinClient
 from tornado import gen
 from tornado.web import RequestHandler, Application, url
 from tornado.platform.asyncio import AsyncIOMainLoop
-
-from gizmo import AsyncGremlinClient
 
 
 class GremlinHandler(RequestHandler):
     @gen.coroutine
     def get(self):
-        gc = AsyncGremlinClient(uri='ws://localhost:8182/', loop=loop)
+        gc = AsyncGremlinClient(uri='ws://localhost:8182/')
         consumer = lambda x: x["result"]["data"]
         yield from gc.task(gc.send_receive, "g.V().values(n)",
                            bindings={"n": "name"}, consumer=consumer)
@@ -201,17 +200,15 @@ def make_app():
     ])
 
 
-AsyncIOMainLoop().install()
-loop = asyncio.get_event_loop()
-
-
 def main():
     app = make_app()
     app.listen(8888)
-    loop.run_forever()
+    AsyncIOMainLoop().install()
+    asyncio.get_event_loop().loop.run_forever()
 
 
 if __name__ == '__main__':
+    print("Starting server at http://localhost:8888/")
     main()
 
 ```
