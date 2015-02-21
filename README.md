@@ -109,6 +109,7 @@ def on_chunks(chunk, f):
     chunk = chunk["result"]["data"]
     f.write(json.dumps(chunk) + '\n')
 
+
 @asyncio.coroutine
 def slowjson(p):
     yield from asyncio.sleep(5)
@@ -141,7 +142,7 @@ Here's the output:
         print(line)
 
 # ["marko", "vadas", "lop", "josh", "ripple", "peter"]
-         
+
 # [{"id": 3, "label": "software", "properties": {"lang": [{"id": 5, "value": "java", "properties": {}}], "name": [{"id": 4, "value": "lop", "properties": {}}]}, "type": "vertex"}, {"id": 2, "label": "person", "properties": {"age": [{"id": 3, "value": 27, "properties": {}}], "name": [{"id": 2, "value": "vadas", "properties": {}}]}, "type": "vertex"}, {"id": 4, "label": "person", "properties": {"age": [{"id": 7, "value": 32, "properties": {}}], "name": [{"id": 6, "value": "josh", "properties": {}}]}, "type": "vertex"}]
 ```
 
