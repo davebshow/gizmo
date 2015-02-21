@@ -79,7 +79,7 @@ As the above example demonstrates, AsyncGremlinClient is made to be interoperabl
 
 ```python
 # This consumer actually returns a value to the message queue.
->>> consumer = lambda x: print(x["result"]["data"])
+>>> consumer = lambda x: x["result"]["data"]
 
 # Define a coroutine that sequentially executes instructions.
 @asyncio.coroutine
@@ -175,9 +175,9 @@ Use **gizmo** with [Tornado](http://tornado.readthedocs.org/en/latest/index.html
 ```python
 import asyncio
 import json
-from tornado import escape, gen
+from tornado import gen
 from tornado.web import RequestHandler, Application, url
-from tornado.platform.asyncio import AsyncIOMainLoop, to_tornado_future
+from tornado.platform.asyncio import AsyncIOMainLoop
 
 from gizmo import AsyncGremlinClient
 
