@@ -53,7 +53,6 @@ We can also use some typical patterns from asyncio to interact with the tasks an
 It's easy to run a bunch of tasks in "parallel", just add them to the client and run them. Warning: the following is an asynchronous technique and does not guarantee the order in which tasks will be completed. Observe:
 
 ```python
-
 # Our "slow" function. This will always take longer than other tasks.
 @asyncio.coroutine
 def superslow():
@@ -79,7 +78,6 @@ def superslow():
 As the above example demonstrates, AsyncGremlinClient is made to be interoperable with asyncio. Here is an example that uses asyncio to create synchronous communication with the Gremlin Server.
 
 ```python
-
 # Define a coroutine that sequentially executes instructions.
 @asyncio.coroutine
 def client(gc):
@@ -99,18 +97,52 @@ def client(gc):
 
 ```
 
-gizmo handles its own event loop internally, but if you want to use a different event loop, just pass it to the constructor.
+**gizmo** handles its own event loop internally, but if you want to use a different event loop, just pass it to the constructor.
+
+Now it is up to you to explore to explore Gremlin and the different ways you can use asyncio and gizmo to interact with the Gremlin Server :D!
 
 ```python
+from functools import partial
+
+
+def on_chunks(chunk, f):
+    chunk = chunk["result"]["data"]
+    f.write(json.dumps(chunk) + '\n')
+
+@asyncio.coroutine
+def slowjson(p):
+    yield from asyncio.sleep(5)
+    yield from gc.send("g.V().values(n)", bindings={"n": "name"},
+                       consumer=p)
+
+
+@asyncio.coroutine
+def client(gc, f):
+    p = partial(on_chunks, f=f)
+    yield from slowjson(p)
+    yield from gc.send("g.V(x).out()", bindings={"x":1})
+    yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
+    if gc.messages.empty():
+        print("No messages")
+
 
 >>> loop = asyncio.get_event_loop()
 >>> gc = AsyncGremlinClient('ws://localhost:8182/', loop=loop)
->>> task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1},
-                   consumer=consumer)
->>> loop.run_until_complete(task)
+>>> f = open("testfile.txt", "w")
+>>> loop.run_until_complete(client(gc, f))
+>>> f.close()
+```
 
-# [{'id': 3, 'type': 'vertex', 'label': 'software', 'properties': {'lang': [{'id': 5, 'value': 'java', 'properties': {}}], 'name': [{'id': 4, 'value': 'lop', 'properties': {}}]}}, {'id': 2, 'type': 'vertex', 'label': 'person', 'properties': {'age': [{'id': 3, 'value': 27, 'properties': {}}], 'name': [{'id': 2, 'value': 'vadas', 'properties': {}}]}}, {'id': 4, 'type': 'vertex', 'label': 'person', 'properties': {'age': [{'id': 7, 'value': 32, 'properties': {}}], 'name': [{'id': 6, 'value': 'josh', 'properties': {}}]}}]
+Here's the output:
 
+```python
+>>> f = open("testfile.txt")
+>>> for line in f:
+        print(line)
+
+# ["marko", "vadas", "lop", "josh", "ripple", "peter"]
+         
+# [{"id": 3, "label": "software", "properties": {"lang": [{"id": 5, "value": "java", "properties": {}}], "name": [{"id": 4, "value": "lop", "properties": {}}]}, "type": "vertex"}, {"id": 2, "label": "person", "properties": {"age": [{"id": 3, "value": 27, "properties": {}}], "name": [{"id": 2, "value": "vadas", "properties": {}}]}, "type": "vertex"}, {"id": 4, "label": "person", "properties": {"age": [{"id": 7, "value": 32, "properties": {}}], "name": [{"id": 6, "value": "josh", "properties": {}}]}, "type": "vertex"}]
 ```
 
 ## GremlinClient
