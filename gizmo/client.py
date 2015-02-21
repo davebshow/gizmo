@@ -113,7 +113,7 @@ class AsyncGremlinClient(BaseGremlinClient):
             if code == 200:
                 if consumer:
                     message = consumer(message)
-                if message:
+                if message and collect:
                     yield from self.messages.put(message)
             elif code == 299:
                 break
@@ -138,7 +138,7 @@ class AsyncGremlinClient(BaseGremlinClient):
 
 class GremlinClient(BaseGremlinClient):
 
-    def __init__(self, uri='ws://localhost:8182/', loop=None):
+        def __init__(self, uri='ws://localhost:8182/', loop=None):
         super().__init__(uri=uri, loop=loop)
         self._messages = []
         self._message_number = 0
@@ -174,7 +174,7 @@ class GremlinClient(BaseGremlinClient):
             if code == 200:
                 if consumer:
                     message = consumer(message)
-                if collect:
+                if message and collect:
                     self._messages.append(message)
             elif code == 299:
                 break
