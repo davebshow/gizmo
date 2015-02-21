@@ -83,13 +83,17 @@ class AsyncGremlinClient(BaseGremlinClient):
         self._tasks.append(task)
         return task
 
-    def reset_messages():
-        self.messages = asyncio.Queue()
-
     @asyncio.coroutine
     def enqueue_task(self, coroutine, *args, **kwargs):
         task = (coroutine, args, kwargs)
         yield from self.task_queue.put(task)
+
+    @asyncio.coroutine
+    def dequeue_task(self):
+        if not self.task_queue.empty():
+            cor, args, kwargs = yield from self.task_queue.get()
+            task = self.task(cor, *args, **kwargs)
+            return (yield from task)
 
     @asyncio.coroutine
     def dequeue_all(self, consumer=None):
@@ -102,6 +106,8 @@ class AsyncGremlinClient(BaseGremlinClient):
 
     @asyncio.coroutine
     def receive(self, consumer=None, collect=True):
+        if consumer is None:
+            consumer = lambda x: x
         websocket = self.sock
         while True:
             # Will need to handle error here if websocket no message has been
@@ -109,7 +115,6 @@ class AsyncGremlinClient(BaseGremlinClient):
             message = yield from websocket.recv()
             message = json.loads(message)
             code = message["status"]["code"]
-            # import ipdb; ipdb.set_trace()
             if code == 200:
                 if consumer:
                     message = consumer(message)
@@ -119,21 +124,15 @@ class AsyncGremlinClient(BaseGremlinClient):
                 break
             else:
                 # Error handler here.
-                message = message["status"]["message"]
+                message_txt = message["status"]["message"]
                 verbose = "Request {} failed with status code {}: {}".format(
-                    payload["requestId"], code, message
+                    message["requestId"], code, message_txt
                 )
                 self._errors.append(verbose)
                 print(verbose)
 
     def run_tasks(self):
         self.run_until_complete(asyncio.wait(self.tasks))
-
-    def run_forever(self):
-        self.loop.run_forever()
-
-    def stop(self, f=None):
-        self.loop.stop()
 
 
 class GremlinClient(BaseGremlinClient):
@@ -164,6 +163,8 @@ class GremlinClient(BaseGremlinClient):
 
     @asyncio.coroutine
     def receive(self, consumer=None, collect=True):
+        if consumer is None:
+            consumer = lambda x: x
         websocket = self.sock
         while True:
             # Will need to handle error here if websocket no message has been
