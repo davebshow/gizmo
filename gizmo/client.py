@@ -75,34 +75,38 @@ class AsyncGremlinClient(BaseGremlinClient):
         return self._tasks
     tasks = property(get_tasks)
 
-    def task(self, coroutine, *args, **kwargs):
-        return asyncio.async(coroutine(*args, **kwargs))
+    def task(self, coro, *args, **kwargs):
+        return asyncio.async(coro(*args, **kwargs))
 
-    def add_task(self, coroutine, *args, **kwargs):
-        task = self.task(coroutine, *args, **kwargs)
+    def add_task(self, coro, *args, **kwargs):
+        task = self.task(coro, *args, **kwargs)
         self._tasks.append(task)
         return task
 
     @asyncio.coroutine
-    def enqueue_task(self, coroutine, *args, **kwargs):
-        task = (coroutine, args, kwargs)
+    def enqueue_task(self, coro, *args, **kwargs):
+        task = (coro, args, kwargs)
         yield from self.task_queue.put(task)
 
     @asyncio.coroutine
     def dequeue_task(self):
         if not self.task_queue.empty():
-            cor, args, kwargs = yield from self.task_queue.get()
-            task = self.task(cor, *args, **kwargs)
+            coro, args, kwargs = yield from self.task_queue.get()
+            task = self.task(coro, *args, **kwargs)
             return (yield from task)
 
     @asyncio.coroutine
-    def dequeue_all(self, consumer=None):
+    def dequeue_all(self):
         while not self.task_queue.empty():
-            cor, args, kwargs = yield from self.task_queue.get()
-            task = self.task(cor, *args, **kwargs)
+            coro, args, kwargs = yield from self.task_queue.get()
+            task = self.task(coro, *args, **kwargs)
             f = yield from task
-            if consumer:
-                consumer(f)
+
+    def async_dequeue_all(self, coro, *args, **kwargs):
+        q = self.task_queue
+        coros = [asyncio.async(coro(q, *args, **kwargs)) for i in
+            range(self.task_queue.qsize())]
+        self.run_until_complete(asyncio.wait(coros))
 
     @asyncio.coroutine
     def receive(self, consumer=None, collect=True):
@@ -126,8 +130,7 @@ class AsyncGremlinClient(BaseGremlinClient):
                 # Error handler here.
                 message_txt = message["status"]["message"]
                 verbose = "Request {} failed with status code {}: {}".format(
-                    message["requestId"], code, message_txt
-                )
+                    message["requestId"], code, message_txt)
                 self._errors.append(verbose)
                 print(verbose)
 
@@ -164,7 +167,7 @@ class GremlinClient(BaseGremlinClient):
     @asyncio.coroutine
     def receive(self, consumer=None, collect=True):
         if consumer is None:
-            consumer = lambda x: x  
+            consumer = lambda x: x
         websocket = self.sock
         while True:
             # Will need to handle error here if websocket no message has been
@@ -183,16 +186,13 @@ class GremlinClient(BaseGremlinClient):
                 # Error handler here.
                 message = message["status"]["message"]
                 verbose = "Request {} failed with status code {}: {}".format(
-                    payload["requestId"], code, message
-                )
+                    payload["requestId"], code, message)
                 self._errors.append(verbose)
                 print(verbose)
 
     def execute(self, gremlin, bindings=None, lang="gremlin-groovy", op="eval",
                 processor="", consumer=None, collect=True):
-        self.run_until_complete(
-            self.send_receive(gremlin, bindings=bindings, lang=lang, op=op,
-                              processor=processor, consumer=consumer,
-                              collect=collect)
-        )
+        coro = self.send_receive(gremlin, bindings=bindings, lang=lang, op=op,
+            processor=processor, consumer=consumer, collect=collect)
+        self.run_until_complete(coro)
         return self

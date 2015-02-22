@@ -92,9 +92,103 @@ def client(gc):
 # ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
 ```
 
-### AsyncGremlinClient task queue
+### AsyncGremlinClient.task_queue
 
-Alternatively, you can use the AsyncGremlinClient task queue to enqueue and dequeue tasks. Tasks are executed as they are dequeued.
+You can use the AsyncGremlinClient task queue to enqueue and dequeue tasks. Tasks are executed as they are dequeued.
+
+Let's set up the example graph used in the TP3 docs.
+
+Fire up the Gremlin-Server.
+
+```bash
+$ ./bin/gremlin-server.sh conf/gremlin-server.yaml
+```
+
+```python
+@asyncio.coroutine
+def graph_create_coro(gc):
+
+    yield from gc.task(gc.send_receive,
+        "g = TinkerGraph.open()", consumer=lambda x: x)
+    while not gc.messages.empty():
+        f = yield from gc.messages.get()
+        assert(f["status"]["code"] == 200)
+
+    # Clear the graph.
+    yield from gc.task(gc.send_receive, "g.V().remove(); g.E().remove();",
+        collect=False)
+
+    yield from gc.task(
+        gc.send_receive,
+        ("gremlin = g.addVertex(label,'software','name','gremlin');" +
+         "gremlin.property('created', 2009);" +
+         "blueprints = g.addVertex(label,'software','name','blueprints');" +
+         "gremlin.addEdge('dependsOn',blueprints);" +
+         "blueprints.property('created',2010);" +
+         "blueprints.property('created').remove()"),
+        collect=False)
+
+    yield from gc.task(
+        gc.send_receive,
+        "g.V().count()",
+        consumer=lambda x: x)
+    while not gc.messages.empty():
+        f = yield from gc.messages.get()
+        assert(f["result"]["data"][0] == 2)
+
+    yield from gc.task(
+        gc.send_receive,
+        "g.E().count()",
+        consumer=lambda x: x)
+    while not gc.messages.empty():
+        f = yield from gc.messages.get()
+        assert(f["result"]["data"][0] == 1)
+
+>>> gc = AsyncGremlinClient("ws://localhost:8182/")
+>>> gc.run_until_complete(graph_create_coro())
+
+```
+
+Ok, now use the task queue to interact with the graph.
+
+```python
+# A new slow coroutine for these examples.
+@asyncio.coroutine
+def sleepy(gc, consumer=None):
+    if consumer is None:
+        consumer = lambda x: x["result"]["data"][0]
+    yield from asyncio.sleep(0.25)
+    yield from gc.task(
+        gc.send_receive,
+        "g.V().has(n, val).values(n)",
+        bindings={"n": "name", "val": "gremlin"},
+        consumer=consumer)
+
+
+# Enqueue two tasks, the first sleepy, the second fast. Then dequeue and
+# execute them one by one
+@asyncio.coroutine
+def enqueue_dequeue_coro(gc):
+    yield from gc.enqueue_task(sleepy)
+    yield from gc.enqueue_task(
+        gc.send_receive,
+        "g.V().has(n, val).values(n)",
+        bindings={"n": "name", "val": "blueprints"},
+        consumer=lambda x: x["result"]["data"][0])
+    yield from gc.dequeue_task()
+    yield from gc.dequeue_task()
+    mssg1 = yield from gc.messages.get()
+    assert(mssg1 == "gremlin")
+    print("Successfully dequeued slow operation: gremlin")
+    mssg2 = yield from gc.messages.get()
+    assert(mssg2 == "blueprints")
+    print("Successfully dequeued fast operation: blueprints")
+
+>>> gc.run_until_complete(enqueue_dequeue_coro(gc))
+```
+
+
+Use dequeue_all to dequeue and execute all tasks in the order in which they were enqueued.
 
 ```python
 @asyncio.coroutine
@@ -110,6 +204,45 @@ def client(gc):
 
 
 >>> gc.run_until_complete(client(gc))
+```
+
+A more advanced usage of the task queue would be to use async_dequeue_all, which requires you to define a coroutine that takes the task_queue as a param and uses the asyncio.Queue.get method to retrieve a coroutine and its args and kwargs. Behind the scenes, this creates a coroutine for each item in the queue, and then executes them on the queue asynchronously. Observe:
+
+```python
+@asyncio.coroutine
+def async_dequeue_consumer(q):
+    coro, args, kwargs = yield from q.get()
+    task = gc.task(coro, *args, **kwargs)
+    f = yield from task
+
+
+@asyncio.coroutine
+def enqueue_all_coro():
+    yield from gc.enqueue_task(sleepy,
+        consumer=lambda x: x["result"]["data"][0])
+    yield from gc.enqueue_task(
+        gc.send_receive,
+        "g.V().has(n, val).values(n)",
+        bindings={"n": "name", "val": "blueprints"},
+        consumer=lambda x: x["result"]["data"][0])
+
+
+>>> gc.run_until_complete(enqueue_all_coro())
+>>> gc.async_dequeue_all(async_dequeue_consumer)
+
+
+# This coroutine just tests the results of the following pattern
+@asyncio.coroutine
+def test_messages_coro():
+    mssg1 = yield from gc.messages.get()
+    mssg2 = yield from gc.messages.get()
+    assert(mssg1 == "blueprints")
+    print("Async returned fast first: blueprints")
+    assert(mssg2 == "gremlin")
+    print("Async returned slow second gremlin")
+
+
+>>> gc.run_until_complete(check_messages_coro())
 ```
 
 ### And much more...

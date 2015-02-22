@@ -228,6 +228,42 @@ class AsyncGremlinClientTests(unittest.TestCase):
             print("Successfully deququeued all.")
         self.client.run_until_complete(dequeue_all_coro())
 
+    def test_async_dequeue_all(self):
+
+        @asyncio.coroutine
+        def check_messages_coro():
+            mssg1 = yield from self.client.messages.get()
+            mssg2 = yield from self.client.messages.get()
+            self.assertEqual(mssg1, "blueprints")
+            print("Async dequeued blueprints")
+            self.assertEqual(mssg2, "gremlin")
+            print("Async dequeued gremlin")
+
+        @asyncio.coroutine
+        def async_dequeue_consumer(q):
+            coro, args, kwargs = yield from q.get()
+            task = self.client.task(coro, *args, **kwargs)
+            f = yield from task
+
+        @asyncio.coroutine
+        def enqueue_all_coro():
+            yield from self.client.enqueue_task(self.slowjson,
+                consumer=lambda x: x["result"]["data"][0])
+            yield from self.client.enqueue_task(
+                self.client.send_receive,
+                "g.V().has(n, val).values(n)",
+                bindings={"n": "name", "val": "blueprints"},
+                consumer=lambda x: x["result"]["data"][0])
+        self.client.run_until_complete(enqueue_all_coro())
+        self.client.async_dequeue_all(async_dequeue_consumer)
+        self.client.run_until_complete(check_messages_coro())
+
+
+
+
+
+
+
 
 class GremlinClientTests(unittest.TestCase):
 
