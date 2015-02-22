@@ -38,9 +38,8 @@ class AsyncGremlinClientTests(unittest.TestCase):
             yield from self.client.task(self.client.send_receive,
                                         "g = TinkerGraph.open()",
                                         consumer=lambda x: x)
-            while not self.client.messages.empty():
-                f = yield from self.client.messages.get()
-                self.assertEqual(f["status"]["code"], 200)
+            f = yield from self.client.messages.get()
+            self.assertEqual(f["status"]["code"], 200)
         self.client.run_until_complete(graph_open_coro())
 
     def test_node_edge_create(self):
@@ -66,49 +65,45 @@ class AsyncGremlinClientTests(unittest.TestCase):
                 self.client.send_receive,
                 "g.V().count()",
                 consumer=lambda x: x)
-            while not self.client.messages.empty():
-                f = yield from self.client.messages.get()
-                self.assertEqual(f["result"]["data"][0], 2)
+            f = yield from self.client.messages.get()
+            self.assertEqual(f["result"]["data"][0], 2)
 
             yield from self.client.task(
                 self.client.send_receive,
                 "g.E().count()",
                 consumer=lambda x: x)
-            while not self.client.messages.empty():
-                f = yield from self.client.messages.get()
-                self.assertEqual(f["result"]["data"][0], 1)
+            f = yield from self.client.messages.get()
+            self.assertEqual(f["result"]["data"][0], 1)
 
             yield from self.client.task(
                 self.client.send_receive,
                 "g.V()")
-            while not self.client.messages.empty():
-                nodes = ["gremlin", "blueprints"]
-                f = yield from self.client.messages.get()
-                label = f["result"]["data"][0]["label"]
-                self.assertEqual(label, "software")
-                name1 = f["result"]["data"][0]["properties"]["name"][0]["value"]
-                self.assertTrue(name1 in nodes)
-                nodes.remove(name1)
-                print("Successfully created node of type software: gremlin")
-                name2 = f["result"]["data"][1]["properties"]["name"][0]["value"]
-                self.assertTrue(name2 in nodes)
-                crtd = f["result"]["data"][1]["properties"].get("created", "")
-                self.assertEqual(crtd, "")
-                print("Successfully created node of type software: blueprints")
+            nodes = ["gremlin", "blueprints"]
+            f = yield from self.client.messages.get()
+            label = f["result"]["data"][0]["label"]
+            self.assertEqual(label, "software")
+            name1 = f["result"]["data"][0]["properties"]["name"][0]["value"]
+            self.assertTrue(name1 in nodes)
+            nodes.remove(name1)
+            print("Successfully created node of type software: gremlin")
+            name2 = f["result"]["data"][1]["properties"]["name"][0]["value"]
+            self.assertTrue(name2 in nodes)
+            crtd = f["result"]["data"][1]["properties"].get("created", "")
+            self.assertEqual(crtd, "")
+            print("Successfully created node of type software: blueprints")
 
             yield from self.client.task(
                 self.client.send_receive,
                 "g.E()")
-            while not self.client.messages.empty():
-                f = yield from self.client.messages.get()
-                label = f["result"]["data"][0]["label"]
-                in_label = f["result"]["data"][0]["inVLabel"]
-                out_label = f["result"]["data"][0]["outVLabel"]
-                self.assertEqual(label, "dependsOn")
-                self.assertEqual(in_label, "software")
-                self.assertEqual(out_label, "software")
-                print("Successfully created edge of type dependsOn: " +
-                      "software dependsOn software")
+            f = yield from self.client.messages.get()
+            label = f["result"]["data"][0]["label"]
+            in_label = f["result"]["data"][0]["inVLabel"]
+            out_label = f["result"]["data"][0]["outVLabel"]
+            self.assertEqual(label, "dependsOn")
+            self.assertEqual(in_label, "software")
+            self.assertEqual(out_label, "software")
+            print("Successfully created edge of type dependsOn: " +
+                  "software dependsOn software")
         self.client.run_until_complete(node_edge_create_coro())
 
     ### Tests for the consumer - if returns value, add to the message queue.
