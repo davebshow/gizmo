@@ -22,17 +22,8 @@ class AsyncGremlinClientTests(unittest.TestCase):
         self.client = AsyncGremlinClient("ws://localhost:8182/")
         self.consumer = lambda x: x["result"]["data"]
 
-    def test_connection(self):
-        @asyncio.coroutine
-        def conn_coro():
-            conn = yield from self.client.connect()
-            self.assertTrue(conn.open)
-        self.client.run_until_complete(conn_coro())
-
-    ### Basic server communication tests. This implements the opening example
-    ### from http://www.tinkerpop.com/docs/3.0.0.M7/###
-
-    def test_graph_create(self):
+        ### Basic server communication tests. This implements the opening example
+        ### from http://www.tinkerpop.com/docs/3.0.0.M7/###
         @asyncio.coroutine
         def graph_open_coro():
             yield from self.client.task(self.client.send_receive,
@@ -42,7 +33,6 @@ class AsyncGremlinClientTests(unittest.TestCase):
             self.assertEqual(f["status"]["code"], 200)
         self.client.run_until_complete(graph_open_coro())
 
-    def test_node_edge_create(self):
         @asyncio.coroutine
         def node_edge_create_coro():
             yield from self.client.task(
@@ -105,6 +95,14 @@ class AsyncGremlinClientTests(unittest.TestCase):
             print("Successfully created edge of type dependsOn: " +
                   "software dependsOn software")
         self.client.run_until_complete(node_edge_create_coro())
+
+
+    def test_connection(self):
+        @asyncio.coroutine
+        def conn_coro():
+            conn = yield from self.client.connect()
+            self.assertTrue(conn.open)
+        self.client.run_until_complete(conn_coro())
 
     ### Tests for the consumer - if returns value, add to the message queue.
 
@@ -254,12 +252,6 @@ class AsyncGremlinClientTests(unittest.TestCase):
         self.client.run_until_complete(check_messages_coro())
 
 
-
-
-
-
-
-
 class GremlinClientTests(unittest.TestCase):
 
     def setUp(self):
@@ -285,6 +277,7 @@ class GremlinClientTests(unittest.TestCase):
         self.assertEqual(self.client._messages[1], "gremlin")
         for x in self.client:
             print("Retrieved: {}".format(x))
+
 
 if __name__ == "__main__":
     unittest.main()
