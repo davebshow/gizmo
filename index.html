@@ -70,6 +70,11 @@
 <h1 id="gizmo">gizmo</h1>
 <p><strong>gizmo</strong> is a <strong>Python 3</strong> driver for the the <a href="http://www.tinkerpop.com/docs/3.0.0.M7/#gremlin-server">TP3 Gremlin Server</a>. This module is built on <a href="https://docs.python.org/3/library/asyncio.html">asyncio</a> and <a href="http://aaugustin.github.io/websockets/">websockets</a>. <strong>gizmo</strong> is currently in <strong>alpha</strong> mode, but all major functionality has test coverage.</p>
 <h2 id="getting-started">Getting started</h2>
+<p>Since Python 3.4 is not the default version on many systems, it's nice to create a virtualenv that uses Python 3.4 by default. Then use pip to install <strong>gizmo</strong>. Using virtualenvwrapper on Ubuntu 14.04:</p>
+<pre><code class="bash">$ mkvirtualenv -p /usr/bin/python3.4 gizmo
+$ pip install gizmo
+</code></pre>
+
 <p>Fire up the Gremlin-Server.</p>
 <pre><code class="bash">$ ./bin/gremlin-server.sh conf/gremlin-server-modern.yaml
 </code></pre>
