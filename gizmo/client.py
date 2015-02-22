@@ -164,7 +164,7 @@ class GremlinClient(BaseGremlinClient):
     @asyncio.coroutine
     def receive(self, consumer=None, collect=True):
         if consumer is None:
-            consumer = lambda x: x
+            consumer = lambda x: x  
         websocket = self.sock
         while True:
             # Will need to handle error here if websocket no message has been

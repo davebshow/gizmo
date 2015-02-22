@@ -54,7 +54,7 @@
     
         <li class="main active"><a href="#gizmo">gizmo</a></li>
         
-            <li><a href="#getting-started">Getting started:</a></li>
+            <li><a href="#getting-started">Getting started</a></li>
         
             <li><a href="#asyncgremlinclient">AsyncGremlinClient</a></li>
         
@@ -69,20 +69,19 @@
 
 <h1 id="gizmo">gizmo</h1>
 <p><strong>gizmo</strong> is a <strong>Python 3</strong> driver for the the <a href="http://www.tinkerpop.com/docs/3.0.0.M7/#gremlin-server">TP3 Gremlin Server</a>. This module is built on <a href="https://docs.python.org/3/library/asyncio.html">asyncio</a> and <a href="http://aaugustin.github.io/websockets/">websockets</a>. <strong>gizmo</strong> is currently in <strong>alpha</strong> mode, but all major functionality has test coverage.</p>
-<h2 id="getting-started">Getting started:</h2>
+<h2 id="getting-started">Getting started</h2>
 <p>Since Python 3.4 is not the default version on many systems, it's nice to create a virtualenv that uses Python 3.4 by default. Then use pip to install <strong>gizmo</strong>. Using virtualenvwrapper on Ubuntu 14.04:</p>
 <pre><code class="bash">$ mkvirtualenv -p /usr/bin/python3.4 gizmo
 $ pip install gizmo
 </code></pre>
 
-<p>Fire up the Gremlin-Server. Remember, TP3 requires <strong>Java 8</strong>.</p>
-<pre><code class="bash">$ ./bin/gremlin-server.sh conf/gremlin-server.yaml
+<p>Fire up the Gremlin-Server.</p>
+<pre><code class="bash">$ ./bin/gremlin-server.sh conf/gremlin-server-modern.yaml
 </code></pre>
 
 <h2 id="asyncgremlinclient">AsyncGremlinClient</h2>
 <p>The AsyncGremlinClient uses asyncio and websockets to communicate asynchronously with the Gremlin Server. The API is based upon the use of <a href="https://docs.python.org/3/library/asyncio-task.html#task">asyncio.Task objects</a>, which take an <a href="https://docs.python.org/3/library/asyncio-task.html#coroutines">asyncio coroutine</a> generator, wrap it in a future, and schedule its execution on the event loop. With the async client, the user must manually launch the transport layer for socket communication using one of the various methods that run the event loop. Observe:</p>
 <pre><code class="python"># Create a websocket connection.
-&gt;&gt;&gt; from gizmo import AsyncGremlinClient
 &gt;&gt;&gt; gc = AsyncGremlinClient('ws://localhost:8182/')
 
 # Define a consumer to use in the examples. This is mapped to the response
@@ -97,10 +96,12 @@ $ pip install gizmo
 
 # Run the event loop until the task is complete.
 &gt;&gt;&gt; gc.run_until_complete(task)
-[{'id': 3, 'type': 'vertex', 'properties': {'lang': [{'id': 5, 'value': 'java', 'properties': {}}], 'name': [{'id': 4, 'value': 'lop', 'properties': {}}]}, 'label': 'software'}, {'id': 2, 'type': 'vertex', 'properties': {'name': [{'id': 2, 'value': 'vadas', 'properties': {}}], 'age': [{'id': 3, 'value': 27, 'properties': {}}]}, 'label': 'person'}, {'id': 4, 'type': 'vertex', 'properties': {'name': [{'id': 6, 'value': 'josh', 'properties': {}}], 'age': [{'id': 7, 'value': 32, 'properties': {}}]}, 'label': 'person'}]
+
+#[{'id': 3, 'type': 'vertex', 'properties': {'lang': [{'id': 5, 'value': 'java', 'properties': {}}], 'name': [{'id': 4, 'value': 'lop', 'properties': {}}]}, 'label': 'software'}, {'id': 2, 'type': 'vertex', 'properties': {'name': [{'id': 2, 'value': 'vadas', 'properties': {}}], 'age': [{'id': 3, 'value': 27, 'properties': {}}]}, 'label': 'person'}, {'id': 4, 'type': 'vertex', 'properties': {'name': [{'id': 6, 'value': 'josh', 'properties': {}}], 'age': [{'id': 7, 'value': 32, 'properties': {}}]}, 'label': 'person'}]
 </code></pre>
 
-<p>It's easy to run a bunch of tasks in "parallel", just add them to the client and run them. <strong>Warning</strong> - the following is an asynchronous technique and does not guarantee the order in which tasks will be completed. Observe:</p>
+<h3 id="parallel-task-execution">Parallel task execution</h3>
+<p>It's easy to run a bunch of tasks in "parallel", just add them to the client and run them. Warning: the following is an asynchronous technique and does not guarantee the order in which tasks will be completed. Observe:</p>
 <pre><code class="python"># Our &quot;slow&quot; function. This will always take longer than other tasks.
 @asyncio.coroutine
 def superslow():
@@ -117,11 +118,13 @@ def superslow():
 
 # This runs all the declared tasks.
 &gt;&gt;&gt; gc.run_tasks()
-['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
-superslow
+
+# ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
+# superslow
 
 </code></pre>
 
+<h3 id="asyncio-with-gizmo">asyncio with gizmo</h3>
 <p>As the above example demonstrates, AsyncGremlinClient is made to be interoperable with asyncio. Here is an example that uses asyncio to create synchronous communication with the Gremlin Server.</p>
 <pre><code class="python"># This consumer actually returns a value to the message queue.
 &gt;&gt;&gt; consumer = lambda x: x[&quot;result&quot;][&quot;data&quot;]
@@ -139,10 +142,12 @@ def client(gc):
 
 &gt;&gt;&gt; gc = AsyncGremlinClient('ws://localhost:8182/')
 &gt;&gt;&gt; gc.run_until_complete(client(gc))
-superslow
-['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
+
+# superslow
+# ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
 </code></pre>
 
+<h3 id="asyncgremlinclient-task-queue">AsyncGremlinClient task queue</h3>
 <p>Alternatively, you can use the AsyncGremlinClient task queue to enqueue and dequeue tasks. Tasks are executed as they are dequeued.</p>
 <pre><code class="python">@asyncio.coroutine
 def client(gc):
@@ -159,6 +164,7 @@ def client(gc):
 &gt;&gt;&gt; gc.run_until_complete(client(gc))
 </code></pre>
 
+<h3 id="and-much-more">And much more...</h3>
 <p>Now it is up to you to explore to explore Gremlin and the different ways you can use asyncio and <strong>gizmo</strong> to interact with the Gremlin Server :D!</p>
 <pre><code class="python">from functools import partial
 
@@ -194,9 +200,10 @@ def client():
 <pre><code class="python">&gt;&gt;&gt; f = open(&quot;testfile.txt&quot;)
 &gt;&gt;&gt; for line in f:
 ...     print(line)
-[&quot;marko&quot;, &quot;vadas&quot;, &quot;lop&quot;, &quot;josh&quot;, &quot;ripple&quot;, &quot;peter&quot;]
 
-[{&quot;id&quot;: 3, &quot;label&quot;: &quot;software&quot;, &quot;properties&quot;: {&quot;lang&quot;: [{&quot;id&quot;: 5, &quot;value&quot;: &quot;java&quot;, &quot;properties&quot;: {}}], &quot;name&quot;: [{&quot;id&quot;: 4, &quot;value&quot;: &quot;lop&quot;, &quot;properties&quot;: {}}]}, &quot;type&quot;: &quot;vertex&quot;}, {&quot;id&quot;: 2, &quot;label&quot;: &quot;person&quot;, &quot;properties&quot;: {&quot;age&quot;: [{&quot;id&quot;: 3, &quot;value&quot;: 27, &quot;properties&quot;: {}}], &quot;name&quot;: [{&quot;id&quot;: 2, &quot;value&quot;: &quot;vadas&quot;, &quot;properties&quot;: {}}]}, &quot;type&quot;: &quot;vertex&quot;}, {&quot;id&quot;: 4, &quot;label&quot;: &quot;person&quot;, &quot;properties&quot;: {&quot;age&quot;: [{&quot;id&quot;: 7, &quot;value&quot;: 32, &quot;properties&quot;: {}}], &quot;name&quot;: [{&quot;id&quot;: 6, &quot;value&quot;: &quot;josh&quot;, &quot;properties&quot;: {}}]}, &quot;type&quot;: &quot;vertex&quot;}]
+# [&quot;marko&quot;, &quot;vadas&quot;, &quot;lop&quot;, &quot;josh&quot;, &quot;ripple&quot;, &quot;peter&quot;]
+
+# [{&quot;id&quot;: 3, &quot;label&quot;: &quot;software&quot;, &quot;properties&quot;: {&quot;lang&quot;: [{&quot;id&quot;: 5, &quot;value&quot;: &quot;java&quot;, &quot;properties&quot;: {}}], &quot;name&quot;: [{&quot;id&quot;: 4, &quot;value&quot;: &quot;lop&quot;, &quot;properties&quot;: {}}]}, &quot;type&quot;: &quot;vertex&quot;}, {&quot;id&quot;: 2, &quot;label&quot;: &quot;person&quot;, &quot;properties&quot;: {&quot;age&quot;: [{&quot;id&quot;: 3, &quot;value&quot;: 27, &quot;properties&quot;: {}}], &quot;name&quot;: [{&quot;id&quot;: 2, &quot;value&quot;: &quot;vadas&quot;, &quot;properties&quot;: {}}]}, &quot;type&quot;: &quot;vertex&quot;}, {&quot;id&quot;: 4, &quot;label&quot;: &quot;person&quot;, &quot;properties&quot;: {&quot;age&quot;: [{&quot;id&quot;: 7, &quot;value&quot;: 32, &quot;properties&quot;: {}}], &quot;name&quot;: [{&quot;id&quot;: 6, &quot;value&quot;: &quot;josh&quot;, &quot;properties&quot;: {}}]}, &quot;type&quot;: &quot;vertex&quot;}]
 </code></pre>
 
 <h2 id="tornado-interoperability-example">Tornado Interoperability Example</h2>
@@ -243,16 +250,18 @@ if __name__ == '__main__':
 </code></pre>
 
 <h2 id="gremlinclient">GremlinClient</h2>
-<p>Use websockets to submit Gremlin scripts to the server and receive the results. GremlinClient.execute returns self, which provides and iterator over the messages returned in the server response.</p>
+<p>GremlinClient.execute returns self, which provides an iterator over the messages received through the websocket.</p>
 <pre><code class="python">&gt;&gt;&gt; from gizmo import GremlinClient
 &gt;&gt;&gt; gc = GremlinClient('ws://localhost:8182/')
 &gt;&gt;&gt; gc.execute(&quot;g.V(x).out()&quot;, bindings={&quot;x&quot;:1}, consumer=lambda x: print(x))
-{'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': '9c2d1263-eebf-47e9-a169-5b790eb49d6f', 'status': {'code': 200, 'message': '', 'attributes': {}}}
+
+# {'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': '9c2d1263-eebf-47e9-a169-5b790eb49d6f', 'status': {'code': 200, 'message': '', 'attributes': {}}}
 
 &gt;&gt;&gt; for x in gc.execute(&quot;g.V(x).out()&quot;, bindings={&quot;x&quot;:1}):
 ...     if x:
 ...         print(x)
-{'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': 'ab51311f-d532-401a-9f4b-df6434765bd3', 'status': {'code': 200, 'message': '', 'attributes': {}}}
+
+# {'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': 'ab51311f-d532-401a-9f4b-df6434765bd3', 'status': {'code': 200, 'message': '', 'attributes': {}}}
 </code></pre>
 
 <p><strong>TODO:</strong></p>

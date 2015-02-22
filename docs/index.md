@@ -2,8 +2,14 @@
 
 **gizmo** is a **Python 3** driver for the the [TP3 Gremlin Server](http://www.tinkerpop.com/docs/3.0.0.M7/#gremlin-server). This module is built on [asyncio](https://docs.python.org/3/library/asyncio.html) and [websockets](http://aaugustin.github.io/websockets/). **gizmo** is currently in **alpha** mode, but all major functionality has test coverage.
 
-## Getting started:
+## Getting started
 
+Since Python 3.4 is not the default version on many systems, it's nice to create a virtualenv that uses Python 3.4 by default. Then use pip to install **gizmo**. Using virtualenvwrapper on Ubuntu 14.04:
+
+```bash
+$ mkvirtualenv -p /usr/bin/python3.4 gizmo
+$ pip install gizmo
+```
 
 Fire up the Gremlin-Server.
 ```bash
@@ -33,6 +39,8 @@ The AsyncGremlinClient uses asyncio and websockets to communicate asynchronously
 #[{'id': 3, 'type': 'vertex', 'properties': {'lang': [{'id': 5, 'value': 'java', 'properties': {}}], 'name': [{'id': 4, 'value': 'lop', 'properties': {}}]}, 'label': 'software'}, {'id': 2, 'type': 'vertex', 'properties': {'name': [{'id': 2, 'value': 'vadas', 'properties': {}}], 'age': [{'id': 3, 'value': 27, 'properties': {}}]}, 'label': 'person'}, {'id': 4, 'type': 'vertex', 'properties': {'name': [{'id': 6, 'value': 'josh', 'properties': {}}], 'age': [{'id': 7, 'value': 32, 'properties': {}}]}, 'label': 'person'}]
 ```
 
+### Parallel task execution
+
 It's easy to run a bunch of tasks in "parallel", just add them to the client and run them. Warning: the following is an asynchronous technique and does not guarantee the order in which tasks will be completed. Observe:
 
 ```python
@@ -58,6 +66,8 @@ def superslow():
 
 ```
 
+### asyncio with gizmo
+
 As the above example demonstrates, AsyncGremlinClient is made to be interoperable with asyncio. Here is an example that uses asyncio to create synchronous communication with the Gremlin Server.
 
 ```python
@@ -82,6 +92,8 @@ def client(gc):
 # ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
 ```
 
+### AsyncGremlinClient task queue
+
 Alternatively, you can use the AsyncGremlinClient task queue to enqueue and dequeue tasks. Tasks are executed as they are dequeued.
 
 ```python
@@ -99,6 +111,8 @@ def client(gc):
 
 >>> gc.run_until_complete(client(gc))
 ```
+
+### And much more...
 
 Now it is up to you to explore to explore Gremlin and the different ways you can use asyncio and **gizmo** to interact with the Gremlin Server :D!
 
@@ -193,7 +207,8 @@ if __name__ == '__main__':
 
 ## GremlinClient
 
-Use websockets to submit Gremlin scripts to the server and receive the results. GremlinClient.execute returns self, which provides and iterator over the messages returned in the server response.
+GremlinClient.execute returns self, which provides an iterator over the messages received through the websocket.
+
 ```python
 >>> from gizmo import GremlinClient
 >>> gc = GremlinClient('ws://localhost:8182/')
