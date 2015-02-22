@@ -4,25 +4,17 @@
 
 ## Getting started:
 
-Since Python 3.4 is not the default version on many systems, it's nice to create a virtualenv that uses Python 3.4 by default. Then use pip to install **gizmo**. Using virtualenvwrapper on Ubuntu 14.04:
 
+Fire up the Gremlin-Server.
 ```bash
-$ mkvirtualenv -p /usr/bin/python3.4 gizmo
-$ pip install gizmo
+$ ./bin/gremlin-server.sh conf/gremlin-server-modern.yaml
 ```
-
-Fire up the Gremlin-Server. Remember, TP3 requires **Java 8**.
-```bash
-$ ./bin/gremlin-server.sh conf/gremlin-server.yaml
-```
-
 ## AsyncGremlinClient
 
 The AsyncGremlinClient uses asyncio and websockets to communicate asynchronously with the Gremlin Server. The API is based upon the use of [asyncio.Task objects](https://docs.python.org/3/library/asyncio-task.html#task), which take an [asyncio coroutine](https://docs.python.org/3/library/asyncio-task.html#coroutines) generator, wrap it in a future, and schedule its execution on the event loop. With the async client, the user must manually launch the transport layer for socket communication using one of the various methods that run the event loop. Observe:
 
 ```python
 # Create a websocket connection.
->>> from gizmo import AsyncGremlinClient
 >>> gc = AsyncGremlinClient('ws://localhost:8182/')
 
 # Define a consumer to use in the examples. This is mapped to the response
@@ -37,10 +29,11 @@ The AsyncGremlinClient uses asyncio and websockets to communicate asynchronously
 
 # Run the event loop until the task is complete.
 >>> gc.run_until_complete(task)
-[{'id': 3, 'type': 'vertex', 'properties': {'lang': [{'id': 5, 'value': 'java', 'properties': {}}], 'name': [{'id': 4, 'value': 'lop', 'properties': {}}]}, 'label': 'software'}, {'id': 2, 'type': 'vertex', 'properties': {'name': [{'id': 2, 'value': 'vadas', 'properties': {}}], 'age': [{'id': 3, 'value': 27, 'properties': {}}]}, 'label': 'person'}, {'id': 4, 'type': 'vertex', 'properties': {'name': [{'id': 6, 'value': 'josh', 'properties': {}}], 'age': [{'id': 7, 'value': 32, 'properties': {}}]}, 'label': 'person'}]
+
+#[{'id': 3, 'type': 'vertex', 'properties': {'lang': [{'id': 5, 'value': 'java', 'properties': {}}], 'name': [{'id': 4, 'value': 'lop', 'properties': {}}]}, 'label': 'software'}, {'id': 2, 'type': 'vertex', 'properties': {'name': [{'id': 2, 'value': 'vadas', 'properties': {}}], 'age': [{'id': 3, 'value': 27, 'properties': {}}]}, 'label': 'person'}, {'id': 4, 'type': 'vertex', 'properties': {'name': [{'id': 6, 'value': 'josh', 'properties': {}}], 'age': [{'id': 7, 'value': 32, 'properties': {}}]}, 'label': 'person'}]
 ```
 
-It's easy to run a bunch of tasks in "parallel", just add them to the client and run them. **Warning** - the following is an asynchronous technique and does not guarantee the order in which tasks will be completed. Observe:
+It's easy to run a bunch of tasks in "parallel", just add them to the client and run them. Warning: the following is an asynchronous technique and does not guarantee the order in which tasks will be completed. Observe:
 
 ```python
 # Our "slow" function. This will always take longer than other tasks.
@@ -59,8 +52,9 @@ def superslow():
 
 # This runs all the declared tasks.
 >>> gc.run_tasks()
-['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
-superslow
+
+# ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
+# superslow
 
 ```
 
@@ -83,8 +77,9 @@ def client(gc):
 
 >>> gc = AsyncGremlinClient('ws://localhost:8182/')
 >>> gc.run_until_complete(client(gc))
-superslow
-['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
+
+# superslow
+# ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
 ```
 
 Alternatively, you can use the AsyncGremlinClient task queue to enqueue and dequeue tasks. Tasks are executed as they are dequeued.
@@ -144,9 +139,10 @@ Here's the output:
 >>> f = open("testfile.txt")
 >>> for line in f:
 ...     print(line)
-["marko", "vadas", "lop", "josh", "ripple", "peter"]
 
-[{"id": 3, "label": "software", "properties": {"lang": [{"id": 5, "value": "java", "properties": {}}], "name": [{"id": 4, "value": "lop", "properties": {}}]}, "type": "vertex"}, {"id": 2, "label": "person", "properties": {"age": [{"id": 3, "value": 27, "properties": {}}], "name": [{"id": 2, "value": "vadas", "properties": {}}]}, "type": "vertex"}, {"id": 4, "label": "person", "properties": {"age": [{"id": 7, "value": 32, "properties": {}}], "name": [{"id": 6, "value": "josh", "properties": {}}]}, "type": "vertex"}]
+# ["marko", "vadas", "lop", "josh", "ripple", "peter"]
+
+# [{"id": 3, "label": "software", "properties": {"lang": [{"id": 5, "value": "java", "properties": {}}], "name": [{"id": 4, "value": "lop", "properties": {}}]}, "type": "vertex"}, {"id": 2, "label": "person", "properties": {"age": [{"id": 3, "value": 27, "properties": {}}], "name": [{"id": 2, "value": "vadas", "properties": {}}]}, "type": "vertex"}, {"id": 4, "label": "person", "properties": {"age": [{"id": 7, "value": 32, "properties": {}}], "name": [{"id": 6, "value": "josh", "properties": {}}]}, "type": "vertex"}]
 ```
 
 ## Tornado Interoperability Example
@@ -202,12 +198,19 @@ Use websockets to submit Gremlin scripts to the server and receive the results. 
 >>> from gizmo import GremlinClient
 >>> gc = GremlinClient('ws://localhost:8182/')
 >>> gc.execute("g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
-{'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': '9c2d1263-eebf-47e9-a169-5b790eb49d6f', 'status': {'code': 200, 'message': '', 'attributes': {}}}
+
+# {'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': '9c2d1263-eebf-47e9-a169-5b790eb49d6f', 'status': {'code': 200, 'message': '', 'attributes': {}}}
 
 >>> for x in gc.execute("g.V(x).out()", bindings={"x":1}):
 ...     if x:
 ...         print(x)
-{'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': 'ab51311f-d532-401a-9f4b-df6434765bd3', 'status': {'code': 200, 'message': '', 'attributes': {}}}
+
+# {'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': 'ab51311f-d532-401a-9f4b-df6434765bd3', 'status': {'code': 200, 'message': '', 'attributes': {}}}
+```
+
+Run tests like so:
+```bash
+python -m unittest gizmo.tests
 ```
 
 **TODO:**

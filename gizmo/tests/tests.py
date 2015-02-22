@@ -254,3 +254,6 @@ class GremlinClientTests(unittest.TestCase):
         self.assertEqual(self.client._messages[1], "gremlin")
         for x in self.client:
             print("Retrieved: {}".format(x))
+
+if __name__ == "__main__":
+    unittest.main()
