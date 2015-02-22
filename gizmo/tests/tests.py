@@ -1,6 +1,6 @@
 import asyncio
 import unittest
-from client import BaseGremlinClient, AsyncGremlinClient, GremlinClient
+from gizmo import BaseGremlinClient, AsyncGremlinClient, GremlinClient
 
 
 class BaseGremlinClientTests(unittest.TestCase):
@@ -254,7 +254,3 @@ class GremlinClientTests(unittest.TestCase):
         self.assertEqual(self.client._messages[1], "gremlin")
         for x in self.client:
             print("Retrieved: {}".format(x))
-
-
-if __name__ == "__main__":
-    unittest.main()
