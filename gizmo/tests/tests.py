@@ -22,8 +22,17 @@ class AsyncGremlinClientTests(unittest.TestCase):
         self.client = AsyncGremlinClient("ws://localhost:8182/")
         self.consumer = lambda x: x["result"]["data"]
 
-        ### Basic server communication tests. This implements the opening example
-        ### from http://www.tinkerpop.com/docs/3.0.0.M7/###
+    def test_01_connection(self):
+        @asyncio.coroutine
+        def conn_coro():
+            conn = yield from self.client.connect()
+            self.assertTrue(conn.open)
+        self.client.run_until_complete(conn_coro())
+
+    ### Basic server communication tests. This implements the opening example
+    ### from http://www.tinkerpop.com/docs/3.0.0.M7/###
+
+    def test_02_graph_create(self):
         @asyncio.coroutine
         def graph_open_coro():
             yield from self.client.task(self.client.send_receive,
@@ -33,6 +42,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
             self.assertEqual(f["status"]["code"], 200)
         self.client.run_until_complete(graph_open_coro())
 
+    def test_03_node_edge_create(self):
         @asyncio.coroutine
         def node_edge_create_coro():
             yield from self.client.task(
@@ -96,17 +106,9 @@ class AsyncGremlinClientTests(unittest.TestCase):
                   "software dependsOn software")
         self.client.run_until_complete(node_edge_create_coro())
 
-
-    def test_connection(self):
-        @asyncio.coroutine
-        def conn_coro():
-            conn = yield from self.client.connect()
-            self.assertTrue(conn.open)
-        self.client.run_until_complete(conn_coro())
-
     ### Tests for the consumer - if returns value, add to the message queue.
 
-    def test_consumer_return(self):
+    def test_04_consumer_return(self):
         @asyncio.coroutine
         def consumer_return_coro():
             yield from self.client.task(
@@ -119,7 +121,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
                 print("Consumer added results to messages")
         self.client.run_until_complete(consumer_return_coro())
 
-    def test_consumer_noreturn(self):
+    def test_05_consumer_noreturn(self):
         @asyncio.coroutine
         def consumer_noreturn_coro():
             yield from self.client.task(
@@ -132,7 +134,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
 
     ### Collect false turns off collection.
 
-    def test_collect_false(self):
+    def test_06_collect_false(self):
         @asyncio.coroutine
         def consumer_return_coro():
             yield from self.client.task(
@@ -157,7 +159,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
             bindings={"n": "name", "val": "gremlin"},
             consumer=consumer)
 
-    def test_parallel_tasks(self):
+    def test_07_parallel_tasks(self):
         task1 = self.client.add_task(self.slowjson)
         task2 = self.client.add_task(
             self.client.send_receive,
@@ -179,7 +181,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
 
     ### Enqueue/dequeue tests.
 
-    def test_enqueue_dequeue(self):
+    def test_08_enqueue_dequeue(self):
         @asyncio.coroutine
         def enqueue_dequeue_coro():
             yield from self.client.enqueue_task(self.slowjson)
@@ -199,7 +201,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
 
         self.client.run_until_complete(enqueue_dequeue_coro())
 
-    def test_dequeue_all(self):
+    def test_09_dequeue_all(self):
         messages = []
         @asyncio.coroutine
         def dequeue_all_coro():
@@ -221,7 +223,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
             print("Successfully deququeued all.")
         self.client.run_until_complete(dequeue_all_coro())
 
-    def test_async_dequeue_all(self):
+    def test_10_async_dequeue_all(self):
 
         @asyncio.coroutine
         def check_messages_coro():
@@ -277,7 +279,6 @@ class GremlinClientTests(unittest.TestCase):
         self.assertEqual(self.client._messages[1], "gremlin")
         for x in self.client:
             print("Retrieved: {}".format(x))
-
 
 if __name__ == "__main__":
     unittest.main()
