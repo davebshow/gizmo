@@ -1,11 +1,10 @@
 import asyncio
 import json
 import uuid
-from functools import partial
 import websockets
 
 
-class BaseGremlinClient(object):
+class BaseGremlinClient:
 
     def __init__(self, uri='ws://localhost:8182/', loop=None):
         self.uri = uri
@@ -105,7 +104,7 @@ class AsyncGremlinClient(BaseGremlinClient):
     def async_dequeue_all(self, coro, *args, **kwargs):
         q = self.task_queue
         coros = [asyncio.async(coro(q, *args, **kwargs)) for i in
-            range(self.task_queue.qsize())]
+            range(q.qsize())]
         self.run_until_complete(asyncio.wait(coros))
 
     @asyncio.coroutine
@@ -151,18 +150,7 @@ class GremlinClient(BaseGremlinClient):
     messages = property(get_messages)
 
     def __iter__(self):
-        return self
-
-    def __next__(self):
-        try:
-            row = self._messages[self._message_number]
-            self._message_number += 1
-            return row
-        except IndexError:
-            raise StopIteration()
-
-    def next(self):
-        return self.__next__()
+        return iter(self._messages)
 
     @asyncio.coroutine
     def receive(self, consumer=None, collect=True):
@@ -196,3 +184,31 @@ class GremlinClient(BaseGremlinClient):
             processor=processor, consumer=consumer, collect=collect)
         self.run_until_complete(coro)
         return self
+
+
+class GremlinResponse(list):
+
+    def __init__(self, resp):
+        super().__init__()
+        for datum in resp["result"]["data"]:
+            if isinstance(datum, dict):
+                try:
+                    datum = parse_struct(datum)
+                except (KeyError, IndexError):
+                    pass
+            self.append(datum)
+        self.meta = resp["result"]["meta"]
+        self.request_id = resp["requestId"]
+        self.status_code = resp["status"]["code"]
+        self.message = resp["status"]["message"]
+        self.attrs = resp["status"]["attributes"]
+
+
+def parse_struct(struct):
+    output = {}
+    output["id"] = struct["id"]
+    output["label"] = struct["label"]
+    output["type"] = struct["type"]
+    properties = {k: v[0]["value"] for (k, v) in struct["properties"].items()}
+    output.update(properties)
+    return output
