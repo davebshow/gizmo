@@ -23,19 +23,13 @@ The AsyncGremlinClient uses asyncio and websockets to communicate asynchronously
 # Create a websocket connection.
 >>> gc = AsyncGremlinClient('ws://localhost:8182/')
 
-# Define a consumer to use in the examples. This is mapped to the response
-# messages from server as they arrive.
->>> consumer = lambda x: print(x["result"]["data"])
-
 # Create a task by passing a coroutine and its parameters as args and kwargs.
 # In this case, send_receive is a method that submits a gremlin script to the
 # server and stores the responses on the client object in a message queue.
->>> task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1},
-        consumer=consumer)
+>>> task = gc.task(gc.send_receive, "g.V(x).out()", bindings={"x":1})
 
 # Run the event loop until the task is complete.
 >>> gc.run_until_complete(task)
-#[{'id': 3, 'type': 'vertex', 'properties': {'lang': [{'id': 5, 'value': 'java', 'properties': {}}], 'name': [{'id': 4, 'value': 'lop', 'properties': {}}]}, 'label': 'software'}, {'id': 2, 'type': 'vertex', 'properties': {'name': [{'id': 2, 'value': 'vadas', 'properties': {}}], 'age': [{'id': 3, 'value': 27, 'properties': {}}]}, 'label': 'person'}, {'id': 4, 'type': 'vertex', 'properties': {'name': [{'id': 6, 'value': 'josh', 'properties': {}}], 'age': [{'id': 7, 'value': 32, 'properties': {}}]}, 'label': 'person'}]
 ```
 
 ### Parallel task execution
@@ -54,8 +48,10 @@ def superslow():
 >>> gc.add_task(superslow)
 
 # Now the fast task.
+# The consumer is an optional param that allows access to the messages
+# as they are returned from the server.
 >>> gc.add_task(gc.send_receive, "g.V().values(n)", bindings={"n": "name"},
-        consumer=consumer)
+        consumer=lambda x: print(x))
 
 # This runs all the declared tasks.
 >>> gc.run_tasks()
@@ -63,23 +59,26 @@ def superslow():
 # superslow
 ```
 
+### GremlinResponse
+
+**gizmo** just barely parses the Gremlin Server response message by wrapping it in a GremlinResponse object. This object inherits from list, and the content of the response is available using all normal list methods, iteration etc. The GremlinResponse also includes the metadata contained in the server response as properties.
+
 ### asyncio with gizmo
 
 As the above example demonstrates, AsyncGremlinClient is made to be interoperable with asyncio. Here is an example that uses asyncio to create synchronous communication with the Gremlin Server.
 
 ```python
-# This consumer actually returns a value to the message queue.
->>> consumer = lambda x: x["result"]["data"]
 
 # Define a coroutine that sequentially executes instructions.
 @asyncio.coroutine
 def client(gc):
     yield from superslow()
     yield from gc.task(gc.send_receive, "g.V().values(n)",
-        bindings={"n": "name"}, consumer=consumer)
+        bindings={"n": "name"})
     # Response messages sent by server are stored in an asyncio.Queue
-    f = yield from gc.messages.get()
-    print(f)
+    while not gc.messages.empty()
+        f = yield from gc.messages.get()
+        print(f)
 
 >>> gc = AsyncGremlinClient('ws://localhost:8182/')
 >>> gc.run_until_complete(client(gc))
@@ -106,7 +105,7 @@ def graph_create_coro(gc):
     yield from gc.task(gc.send_receive, "g = TinkerGraph.open()",
         consumer=lambda x: x)
     f = yield from gc.messages.get()
-    assert(f["status"]["code"] == 200)
+    assert(f.status_code == 200)
 
     # Clear the graph.
     yield from gc.task(gc.send_receive, "g.V().remove(); g.E().remove();",
@@ -124,12 +123,12 @@ def graph_create_coro(gc):
     # Confirm node creation.
     yield from gc.task(gc.send_receive, "g.V().count()", consumer=lambda x: x)
     f = yield from gc.messages.get()
-    assert(f["result"]["data"][0] == 2)
+    assert(f[0] == 2)
 
     # Confirm edge creation.
     yield from gc.task(gc.send_receive, "g.E().count()", consumer=lambda x: x)
     f = yield from gc.messages.get()
-    assert(f["result"]["data"][0] == 1)
+    assert(f[0] == 1)
 
 >>> gc = AsyncGremlinClient("ws://localhost:8182/")
 >>> gc.run_until_complete(graph_create_coro())
@@ -142,7 +141,7 @@ Ok, now use the task queue to interact with the graph.
 @asyncio.coroutine
 def sleepy(gc, consumer=None):
     if consumer is None:
-        consumer = lambda x: x["result"]["data"][0]
+        consumer = lambda x: x[0]
     yield from asyncio.sleep(0.25)
     yield from gc.task(gc.send_receive, "g.V().has(n, val).values(n)",
         bindings={"n": "name", "val": "gremlin"}, consumer=consumer)
@@ -156,7 +155,7 @@ def enqueue_dequeue_coro(gc):
     yield from gc.enqueue_task(sleepy)
     yield from gc.enqueue_task(gc.send_receive, "g.V().has(n, val).values(n)",
         bindings={"n": "name", "val": "blueprints"},
-        consumer=lambda x: x["result"]["data"][0])
+        consumer=lambda x: x[0])
 
     # Dequeues.
     yield from gc.dequeue_task()
@@ -182,8 +181,8 @@ Use dequeue_all to dequeue and execute all tasks in the order in which they were
 def client(gc):
     yield from gc.enqueue_task(superslow)
     yield from gc.enqueue_task(gc.send_receive, "g.V().values(name)",
-        bindings={"name": "name"}, consumer=consumer)
-    yield from gc.dequeue_all(consumer=consumer)
+        bindings={"name": "name"})
+    yield from gc.dequeue_all()
 
 
 >>> gc.run_until_complete(client(gc))
@@ -203,10 +202,10 @@ def async_dequeue_consumer(q):
 @asyncio.coroutine
 def enqueue_all_coro():
     yield from gc.enqueue_task(sleepy,
-        consumer=lambda x: x["result"]["data"][0])
+        consumer=lambda x: x[0])
     yield from gc.enqueue_task(gc.send_receive, "g.V().has(n, val).values(n)",
         bindings={"n": "name", "val": "blueprints"},
-        consumer=lambda x: x["result"]["data"][0])
+        consumer=lambda x: x[0])
 
 
 # Add all items to the task queue.
@@ -238,7 +237,7 @@ from functools import partial
 
 
 def on_chunk(chunk, f):
-    chunk = chunk["result"]["data"]
+    chunk = chunk
     f.write(json.dumps(chunk) + '\n')
 
 
@@ -270,9 +269,10 @@ Here's the output:
 >>> f = open("testfile.txt")
 >>> for line in f:
 ...     print(line)
-# ["marko", "vadas", "lop", "josh", "ripple", "peter"]
+["marko", "vadas", "lop", "josh", "ripple", "peter"]
 
-# [{"id": 3, "label": "software", "properties": {"lang": [{"id": 5, "value": "java", "properties": {}}], "name": [{"id": 4, "value": "lop", "properties": {}}]}, "type": "vertex"}, {"id": 2, "label": "person", "properties": {"age": [{"id": 3, "value": 27, "properties": {}}], "name": [{"id": 2, "value": "vadas", "properties": {}}]}, "type": "vertex"}, {"id": 4, "label": "person", "properties": {"age": [{"id": 7, "value": 32, "properties": {}}], "name": [{"id": 6, "value": "josh", "properties": {}}]}, "type": "vertex"}]
+[{"label": "software", "name": ["lop"], "type": "vertex", "lang": ["java"], "id": 3}, {"label": "person", "name": ["vadas"], "age": [27], "type": "vertex", "id": 2}, {"label": "person", "name": ["josh"], "age": [32], "type": "vertex", "id": 4}]
+
 ```
 
 ## Tornado Interoperability Example
@@ -293,10 +293,9 @@ class GremlinHandler(RequestHandler):
     @gen.coroutine
     def get(self):
         gc = AsyncGremlinClient(uri='ws://localhost:8182/')
-        consumer = lambda x: x["result"]["data"]
         # Could define custom receive here, but for brevity...
         yield from gc.task(gc.send_receive, "g.V().values(n)",
-            bindings={"n": "name"}, consumer=consumer)
+            bindings={"n": "name"})
         while not gc.messages.empty():
             message = yield from gc.messages.get()
             message = json.dumps(message)
@@ -330,15 +329,14 @@ GremlinClient.execute returns self, which provides an iterator over the messages
 >>> from gizmo import GremlinClient
 >>> gc = GremlinClient('ws://localhost:8182/')
 >>> gc.execute("g.V(x).out()", bindings={"x":1}, consumer=lambda x: print(x))
-# {'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': '9c2d1263-eebf-47e9-a169-5b790eb49d6f', 'status': {'code': 200, 'message': '', 'attributes': {}}}
 
 >>> for x in gc.execute("g.V(x).out()", bindings={"x":1}):
 ...     if x:
 ...         print(x)
-# {'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': 'ab51311f-d532-401a-9f4b-df6434765bd3', 'status': {'code': 200, 'message': '', 'attributes': {}}}
 ```
 
 
 **TODO:**
 
+* SSL Server Tests
 * Error handling!!!
