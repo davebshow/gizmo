@@ -1,16 +1,25 @@
 import asyncio
 import json
+import ssl
 import uuid
 import websockets
-from functools import partial
 from .response import GremlinResponse
 
 
 class BaseGremlinClient:
 
-    def __init__(self, uri='ws://localhost:8182/', loop=None):
+    def __init__(self, uri='ws://localhost:8182/', loop=None, ssl=None,
+                 protocol=None, **kwargs):
         self.uri = uri
-        self._sock = asyncio.async(self.connect())
+        # SLL is untested. Need to set up secure server and try it out.
+        # Will look something like this.
+        if ssl:
+            protocol = protocol or ssl.PROTOCOL_TLSv1
+            ssl_context = ssl.SSLContext(protocol)
+            ssl_context.load_verify_locations(ssl)
+            ssl_context.verify_mode = ssl.CERT_REQUIRED
+            kwargs['ssl'] = ssl_context
+        self._sock = asyncio.async(self.connect(**kwargs))
         self._errors = []
         self._loop = loop or asyncio.get_event_loop()
 
@@ -23,9 +32,8 @@ class BaseGremlinClient:
     errors = property(get_errors)
 
     @asyncio.coroutine
-    def connect(self):
-        websocket = yield from websockets.connect(self.uri)
-        self._sock = websocket
+    def connect(self, **kwargs):
+        websocket = yield from websockets.connect(self.uri, **kwargs)
         return websocket
 
     @asyncio.coroutine
@@ -43,6 +51,7 @@ class BaseGremlinClient:
         }
         try:
             websocket = yield from self.sock
+            self._sock = websocket
         except TypeError:
             websocket = self.sock
         yield from websocket.send(json.dumps(payload))
@@ -64,8 +73,8 @@ class BaseGremlinClient:
 
 class AsyncGremlinClient(BaseGremlinClient):
 
-    def __init__(self, uri='ws://localhost:8182/', loop=None):
-        super().__init__(uri=uri, loop=loop)
+    def __init__(self, uri='ws://localhost:8182/', loop=None, **kwargs):
+        super().__init__(uri=uri, loop=loop, **kwargs)
         self.messages = asyncio.Queue()
         self._tasks = []
         self.task_queue = asyncio.Queue()
@@ -136,8 +145,8 @@ class AsyncGremlinClient(BaseGremlinClient):
 
 class GremlinClient(BaseGremlinClient):
 
-    def __init__(self, uri='ws://localhost:8182/', loop=None):
-        super().__init__(uri=uri, loop=loop)
+    def __init__(self, uri='ws://localhost:8182/', loop=None, **kwargs):
+        super().__init__(uri=uri, loop=loop, **kwargs)
         self._messages = []
         self._message_number = 0
 
@@ -178,32 +187,3 @@ class GremlinClient(BaseGremlinClient):
             processor=processor, consumer=consumer, collect=collect)
         self.run_until_complete(coro)
         return self
-
-
-# resp = {'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': 'ab51311f-d532-401a-9f4b-df6434765bd3', 'status': {'code': 200, 'message': '', 'attributes': {}}}
-
-def on_chunk(chunk, f):
-    chunk = chunk
-    f.write(json.dumps(chunk) + '\n')
-
-
-@asyncio.coroutine
-def slowjson(gc):
-    yield from asyncio.sleep(5)
-    yield from gc.send("g.V().values(n)", bindings={"n": "name"})
-
-
-@asyncio.coroutine
-def client():
-    gc = AsyncGremlinClient('ws://localhost:8182/')
-    with open("testfile.txt", "w") as f:
-        p = partial(on_chunk, f=f)
-        yield from slowjson(gc)
-        yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
-        yield from gc.send("g.V(x).out()", bindings={"x":1})
-        yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
-        if gc.messages.empty():
-            print("No messages collected.")
-
-
-asyncio.get_event_loop().run_until_complete(client())
