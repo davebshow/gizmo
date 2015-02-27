@@ -2,6 +2,8 @@ import asyncio
 import json
 import uuid
 import websockets
+from functools import partial
+from .response import GremlinResponse
 
 
 class BaseGremlinClient:
@@ -10,9 +12,7 @@ class BaseGremlinClient:
         self.uri = uri
         self._sock = asyncio.async(self.connect())
         self._errors = []
-        self.loop = loop
-        if loop is None:
-            self.loop = asyncio.get_event_loop()
+        self._loop = loop or asyncio.get_event_loop()
 
     def get_sock(self):
         return self._sock
@@ -59,7 +59,7 @@ class BaseGremlinClient:
         yield from self.receive(consumer=consumer, collect=collect)
 
     def run_until_complete(self, func):
-        self.loop.run_until_complete(func)
+        self._loop.run_until_complete(func)
 
 
 class AsyncGremlinClient(BaseGremlinClient):
@@ -109,27 +109,24 @@ class AsyncGremlinClient(BaseGremlinClient):
 
     @asyncio.coroutine
     def receive(self, consumer=None, collect=True):
-        if consumer is None:
-            consumer = lambda x: x
         websocket = self.sock
         while True:
             # Will need to handle error here if websocket no message has been
             # sent.
             message = yield from websocket.recv()
             message = json.loads(message)
-            code = message["status"]["code"]
-            if code == 200:
+            message = GremlinResponse(message)
+            if message.status_code == 200:
                 if consumer:
                     message = consumer(message)
                 if message and collect:
                     yield from self.messages.put(message)
-            elif code == 299:
+            elif message.status_code == 299:
                 break
             else:
                 # Error handler here.
-                message_txt = message["status"]["message"]
                 verbose = "Request {} failed with status code {}: {}".format(
-                    message["requestId"], code, message_txt)
+                    message.request_id, message.status_code, message.message)
                 self._errors.append(verbose)
                 print(verbose)
 
@@ -154,27 +151,24 @@ class GremlinClient(BaseGremlinClient):
 
     @asyncio.coroutine
     def receive(self, consumer=None, collect=True):
-        if consumer is None:
-            consumer = lambda x: x
         websocket = self.sock
         while True:
             # Will need to handle error here if websocket no message has been
             # sent.
             message = yield from websocket.recv()
             message = json.loads(message)
-            code = message["status"]["code"]
-            if code == 200:
+            message = GremlinResponse(message)
+            if message.status_code == 200:
                 if consumer:
                     message = consumer(message)
                 if message and collect:
                     self._messages.append(message)
-            elif code == 299:
+            elif message.status_code == 299:
                 break
             else:
                 # Error handler here.
-                message = message["status"]["message"]
                 verbose = "Request {} failed with status code {}: {}".format(
-                    payload["requestId"], code, message)
+                    message.request_id, message.satus_code, message.message)
                 self._errors.append(verbose)
                 print(verbose)
 
@@ -186,29 +180,30 @@ class GremlinClient(BaseGremlinClient):
         return self
 
 
-class GremlinResponse(list):
+# resp = {'result': {'data': [{'label': 'software', 'id': 3, 'properties': {'name': [{'value': 'lop', 'id': 4, 'properties': {}}], 'lang': [{'value': 'java', 'id': 5, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 2, 'properties': {'name': [{'value': 'vadas', 'id': 2, 'properties': {}}], 'age': [{'value': 27, 'id': 3, 'properties': {}}]}, 'type': 'vertex'}, {'label': 'person', 'id': 4, 'properties': {'name': [{'value': 'josh', 'id': 6, 'properties': {}}], 'age': [{'value': 32, 'id': 7, 'properties': {}}]}, 'type': 'vertex'}], 'meta': {}}, 'requestId': 'ab51311f-d532-401a-9f4b-df6434765bd3', 'status': {'code': 200, 'message': '', 'attributes': {}}}
 
-    def __init__(self, resp):
-        super().__init__()
-        for datum in resp["result"]["data"]:
-            if isinstance(datum, dict):
-                try:
-                    datum = parse_struct(datum)
-                except (KeyError, IndexError):
-                    pass
-            self.append(datum)
-        self.meta = resp["result"]["meta"]
-        self.request_id = resp["requestId"]
-        self.status_code = resp["status"]["code"]
-        self.message = resp["status"]["message"]
-        self.attrs = resp["status"]["attributes"]
+def on_chunk(chunk, f):
+    chunk = chunk
+    f.write(json.dumps(chunk) + '\n')
 
 
-def parse_struct(struct):
-    output = {}
-    output["id"] = struct["id"]
-    output["label"] = struct["label"]
-    output["type"] = struct["type"]
-    properties = {k: v[0]["value"] for (k, v) in struct["properties"].items()}
-    output.update(properties)
-    return output
+@asyncio.coroutine
+def slowjson(gc):
+    yield from asyncio.sleep(5)
+    yield from gc.send("g.V().values(n)", bindings={"n": "name"})
+
+
+@asyncio.coroutine
+def client():
+    gc = AsyncGremlinClient('ws://localhost:8182/')
+    with open("testfile.txt", "w") as f:
+        p = partial(on_chunk, f=f)
+        yield from slowjson(gc)
+        yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
+        yield from gc.send("g.V(x).out()", bindings={"x":1})
+        yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
+        if gc.messages.empty():
+            print("No messages collected.")
+
+
+asyncio.get_event_loop().run_until_complete(client())

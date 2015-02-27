@@ -20,7 +20,6 @@ class AsyncGremlinClientTests(unittest.TestCase):
 
     def setUp(self):
         self.client = AsyncGremlinClient("ws://localhost:8182/")
-        self.consumer = lambda x: x["result"]["data"]
 
     def test_01_connection(self):
         @asyncio.coroutine
@@ -36,10 +35,9 @@ class AsyncGremlinClientTests(unittest.TestCase):
         @asyncio.coroutine
         def graph_open_coro():
             yield from self.client.task(self.client.send_receive,
-                                        "g = TinkerGraph.open()",
-                                        consumer=lambda x: x)
+                                        "g = TinkerGraph.open()")
             f = yield from self.client.messages.get()
-            self.assertEqual(f["status"]["code"], 200)
+            self.assertEqual(f.status_code, 200)
         self.client.run_until_complete(graph_open_coro())
 
     def test_03_node_edge_create(self):
@@ -63,32 +61,30 @@ class AsyncGremlinClientTests(unittest.TestCase):
 
             yield from self.client.task(
                 self.client.send_receive,
-                "g.V().count()",
-                consumer=lambda x: x)
+                "g.V().count()")
             f = yield from self.client.messages.get()
-            self.assertEqual(f["result"]["data"][0], 2)
+            self.assertEqual(f[0], 2)
 
             yield from self.client.task(
                 self.client.send_receive,
-                "g.E().count()",
-                consumer=lambda x: x)
+                "g.E().count()")
             f = yield from self.client.messages.get()
-            self.assertEqual(f["result"]["data"][0], 1)
+            self.assertEqual(f[0], 1)
 
             yield from self.client.task(
                 self.client.send_receive,
                 "g.V()")
             nodes = ["gremlin", "blueprints"]
             f = yield from self.client.messages.get()
-            label = f["result"]["data"][0]["label"]
+            label = f[0]["label"]
             self.assertEqual(label, "software")
-            name1 = f["result"]["data"][0]["properties"]["name"][0]["value"]
+            name1 = f[0]["name"][0]
             self.assertTrue(name1 in nodes)
             nodes.remove(name1)
             print("Successfully created node of type software: gremlin")
-            name2 = f["result"]["data"][1]["properties"]["name"][0]["value"]
+            name2 = f[1]["name"][0]
             self.assertTrue(name2 in nodes)
-            crtd = f["result"]["data"][1]["properties"].get("created", "")
+            crtd = f[1].get("created", "")
             self.assertEqual(crtd, "")
             print("Successfully created node of type software: blueprints")
 
@@ -96,9 +92,9 @@ class AsyncGremlinClientTests(unittest.TestCase):
                 self.client.send_receive,
                 "g.E()")
             f = yield from self.client.messages.get()
-            label = f["result"]["data"][0]["label"]
-            in_label = f["result"]["data"][0]["inVLabel"]
-            out_label = f["result"]["data"][0]["outVLabel"]
+            label = f[0]["label"]
+            in_label = f[0]["inVLabel"]
+            out_label = f[0]["outVLabel"]
             self.assertEqual(label, "dependsOn")
             self.assertEqual(in_label, "software")
             self.assertEqual(out_label, "software")
@@ -114,7 +110,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
             yield from self.client.task(
                 self.client.send_receive,
                 "1 + 1",
-                consumer=lambda x: x["result"]["data"][0] ** 2)
+                consumer=lambda x: x[0] ** 2)
             while not self.client.messages.empty():
                 f = yield from self.client.messages.get()
                 self.assertEqual(f, 4)
@@ -127,7 +123,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
             yield from self.client.task(
                 self.client.send_receive,
                 "1 + 1",
-                consumer=lambda x: print(x["result"]["data"][0] ** 2))
+                consumer=lambda x: print(x[0] ** 2))
             self.assertTrue(self.client.messages.empty())
             print("Consumer did not add results to messages")
         self.client.run_until_complete(consumer_noreturn_coro())
@@ -140,7 +136,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
             yield from self.client.task(
                 self.client.send_receive,
                 "1 + 1",
-                consumer=lambda x: x["result"]["data"][0] ** 2,
+                consumer=lambda x: x[0] ** 2,
                 collect=False)
             self.assertTrue(self.client.messages.empty())
             print("No collection performed")
@@ -151,7 +147,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
     @asyncio.coroutine
     def slowjson(self, consumer=None):
         if consumer is None:
-            consumer = lambda x: x["result"]["data"][0]
+            consumer = lambda x: x[0]
         yield from asyncio.sleep(0.25)
         yield from self.client.task(
             self.client.send_receive,
@@ -165,7 +161,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
             self.client.send_receive,
             "g.V().has(n, val).values(n)",
             bindings={"n": "name", "val": "blueprints"},
-            consumer=lambda x: x["result"]["data"][0])
+            consumer=lambda x: x[0])
         self.client.run_tasks()
         names = []
         @asyncio.coroutine
@@ -189,7 +185,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
                 self.client.send_receive,
                 "g.V().has(n, val).values(n)",
                 bindings={"n": "name", "val": "blueprints"},
-                consumer=lambda x: x["result"]["data"][0])
+                consumer=lambda x: x[0])
             yield from self.client.dequeue_task()
             yield from self.client.dequeue_task()
             mssg1 = yield from self.client.messages.get()
@@ -207,12 +203,12 @@ class AsyncGremlinClientTests(unittest.TestCase):
         def dequeue_all_coro():
             yield from self.client.enqueue_task(
                 self.slowjson,
-                consumer=lambda x: x["result"]["data"][0])
+                consumer=lambda x: x[0])
             yield from self.client.enqueue_task(
                 self.client.send_receive,
                 "g.V().has(n, val).values(n)",
                 bindings={"n": "name", "val": "blueprints"},
-                consumer=lambda x: x["result"]["data"][0])
+                consumer=lambda x: x[0])
             yield from self.client.dequeue_all()
             while not self.client.messages.empty():
                 mssg = yield from self.client.messages.get()
@@ -243,12 +239,12 @@ class AsyncGremlinClientTests(unittest.TestCase):
         @asyncio.coroutine
         def enqueue_all_coro():
             yield from self.client.enqueue_task(self.slowjson,
-                consumer=lambda x: x["result"]["data"][0])
+                consumer=lambda x: x[0])
             yield from self.client.enqueue_task(
                 self.client.send_receive,
                 "g.V().has(n, val).values(n)",
                 bindings={"n": "name", "val": "blueprints"},
-                consumer=lambda x: x["result"]["data"][0])
+                consumer=lambda x: x[0])
         self.client.run_until_complete(enqueue_all_coro())
         self.client.async_dequeue_all(async_dequeue_consumer)
         self.client.run_until_complete(check_messages_coro())
@@ -270,12 +266,12 @@ class GremlinClientTests(unittest.TestCase):
         self.client.execute(
             "g.V().has(n, val).values(n)",
             bindings={"n": "name", "val": "blueprints"},
-            consumer=lambda x: x["result"]["data"][0])
+            consumer=lambda x: x[0])
         self.assertEqual(self.client._messages[0], "blueprints")
         self.client.execute(
             "g.V().has(n, val).values(n)",
             bindings={"n": "name", "val": "gremlin"},
-            consumer=lambda x: x["result"]["data"][0])
+            consumer=lambda x: x[0])
         self.assertEqual(self.client._messages[1], "gremlin")
         for x in self.client:
             print("Retrieved: {}".format(x))
