@@ -1,6 +1,7 @@
 import asyncio
 import unittest
-from gizmo import BaseGremlinClient, AsyncGremlinClient, GremlinClient
+from gizmo import (BaseGremlinClient, AsyncGremlinClient, GremlinClient,
+    RequestError, GremlinServerError)
 
 
 class BaseGremlinClientTests(unittest.TestCase):
@@ -294,6 +295,54 @@ class AsyncGremlinClientTests(unittest.TestCase):
                 print("Simple recv yielded {}".format(f))
         self.client.run_until_complete(recv_coro())
 
+    def test_14_recv_error(self):
+        @asyncio.coroutine
+        def recv_error_coro():
+            value = 0
+            yield from self.client.send("g.V().has(n, ",
+                bindings={"n": "name", "val": "gremlin"})
+            while True:
+                try:
+                    f = yield from self.client.recv()
+                    if f is None:
+                        break
+                except GremlinServerError as e:
+                    value = e.value
+                    break
+            self.assertEqual(value, 597)
+            print("recv returned Error: {}".format(value))
+        self.client.run_until_complete(recv_error_coro())
+
+    def test_15_submit_error(self):
+        @asyncio.coroutine
+        def submit_error_coro():
+            value = 0
+            try:
+                yield from self.client.submit("g.V().has(n, ",
+                    bindings={"n": "name", "val": "gremlin"})
+            except GremlinServerError as e:
+                value = e.value
+                pass
+            self.assertEqual(value, 597)
+            print("submit returned Error: {}".format(value))
+        self.client.run_until_complete(submit_error_coro())
+
+    def test_16_test_iter(self):
+        results = []
+        task1 = self.client.add_task(self.slowjson)
+        task2 = self.client.add_task(self.client.submit,
+            "g.V().has(n, val).values(n)",
+            bindings={"n": "name", "val": "blueprints"},
+            consumer=lambda x: x[0])
+        self.client.run_tasks()
+        for x in self.client:
+            results.append(x)
+        self.assertEqual(len(results), 2)
+        print("Iterator produced 2 results.")
+        self.assertEqual(results[0], "blueprints")
+        print("First result is fast: blueprints")
+        self.assertEqual(results[1], "gremlin")
+        print("Second result is slow: gremlin")
 
 
 class GremlinClientTests(unittest.TestCase):
@@ -321,6 +370,17 @@ class GremlinClientTests(unittest.TestCase):
         self.assertEqual(self.client._messages[1], "gremlin")
         for x in self.client:
             print("Retrieved: {}".format(x))
+
+    def test_execute_error(self):
+        value = 0
+        try:
+            self.client.execute("g.V().has(n, ",
+                bindings={"n": "name", "val": "blueprints"},
+                consumer=lambda x: x[0])
+        except GremlinServerError as e:
+            value = e.value
+            pass
+        self.assertEqual(value, 597)
 
 if __name__ == "__main__":
     unittest.main()

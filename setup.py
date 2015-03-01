@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name="gizmo",
-    version="0.1.5",
+    version="0.1.6",
     url="",
     license="MIT",
     author="davebshow",

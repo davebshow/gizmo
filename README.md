@@ -1,4 +1,4 @@
-# gizmo 0.1.5
+# gizmo 0.1.6
 
 **API BREAKING CHANGES HAVE OCCURRED BETWEEN 0.1.4 AND 0.1.5 - AsyncGremlinClient.send_receive is now AsyncGremlinClient.submit**
 
@@ -98,22 +98,26 @@ It's easy to run a bunch of tasks in "parallel", just add them to the client and
 ```python
 # Our "slow" function. This will always take longer than other tasks.
 @asyncio.coroutine
-def superslow():
-    yield from asyncio.sleep(5)
-    print("superslow")
+def sleepy(gc):
+    yield from asyncio.sleep(0.25)
+    yield from gc.task(gc.submit, "g.V().has(n, val).values(n)",
+        bindings={"n": "name", "val": "gremlin"})
 
 
 # Submit the slow task first.
->>> gc.add_task(superslow)
+>>> gc.add_task(sleepy, gc)
 
 # Now the fast task.
-# The consumer is an optional param that allows access to the messages
-# as they are returned from the server.
 >>> gc.add_task(gc.submit, "g.V().values(n)", bindings={"n": "name"},
-        consumer=lambda x: print(x))
+        consumer=lambda x: x)
 
 # This runs all the declared tasks.
 >>> gc.run_tasks()
+
+# The task results will be stored on the message queue.
+# You can retrieve them using the asyncio.Queue API, or you can just iterate.
+>>> for x in gc:
+...     print(x)
 # ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
 # superslow
 ```
@@ -131,7 +135,7 @@ As the above examples demonstrate, AsyncGremlinClient is made to be interoperabl
 # Define a coroutine that sequentially executes instructions.
 @asyncio.coroutine
 def client(gc):
-    yield from superslow()
+    yield from sleepy(gc)
     yield from gc.task(gc.submit, "g.V().values(n)",
         bindings={"n": "name"})
     # Response messages sent by server are stored in an asyncio.Queue
@@ -199,16 +203,6 @@ def graph_create_coro(gc):
 Ok, now use the task queue to interact with the graph.
 
 ```python
-# A new slow coroutine for these examples.
-@asyncio.coroutine
-def sleepy(gc, consumer=None):
-    if consumer is None:
-        consumer = lambda x: x[0]
-    yield from asyncio.sleep(0.25)
-    yield from gc.task(gc.submit, "g.V().has(n, val).values(n)",
-        bindings={"n": "name", "val": "gremlin"}, consumer=consumer)
-
-
 # Enqueue two tasks, the first sleepy, the second fast. Then dequeue and
 # execute them one by one
 @asyncio.coroutine
@@ -401,4 +395,4 @@ GremlinClient.execute returns self, which provides an iterator over the messages
 **TODO:**
 
 * SSL Server Tests
-* Error handling!!!
+* Error handling

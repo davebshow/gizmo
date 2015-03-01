@@ -1,9 +1,17 @@
+"""
+gizmo.response
+
+This module defines parsers for the Gremlin Server response.
+"""
+
 class GremlinResponse(list):
-    """
-    Parse and flatten the Gremlin Server's response a bit. Make standard use
-    case easier for end user to process.
-    """
     def __init__(self, message):
+        """
+        A subclass of list that parses and flattens the Gremlin Server's
+        response a bit. Make standard usecase easier for end user to process.
+
+        :param message: Message from Gremlin Server.
+        """
         super().__init__()
         data = message["result"].get("data", "")
         if data:
@@ -22,6 +30,12 @@ class GremlinResponse(list):
 
 
 def parse_struct(struct):
+    """
+    Flatten out Gremlin Vertex and Edges a bit.
+
+    :param struct: Vertex or Edge.
+    :return: dict
+    """
     output = {}
     for k, v in struct.items():
         if k != "properties":
