@@ -117,7 +117,7 @@ consumer = lambda x: x[0] ** 2
 
 @asyncio.coroutine
 def message_queue_coro(gc):
-    yield from gc.submit(&quot;2 + 2&quot;), consumer=consumer)
+    yield from gc.submit(&quot;2 + 2&quot;, consumer=consumer)
     while True:
         f = yield from gc.read()
         if f is None:
@@ -135,7 +135,7 @@ def consumer_coro(x):
 
 @asyncio.coroutine
 def coroutine_consumer_coro():
-    yield from gc.submit(&quot;2 + 2&quot;), consumer=consumer)
+    yield from gc.submit(&quot;2 + 2&quot;, consumer=consumer)
     # Access the messages queue directly.
     while not gc.messages.empty():
         f = yield from gc.read()
@@ -194,7 +194,7 @@ def client(gc):
 
 &gt;&gt;&gt; gc = AsyncGremlinClient('ws://localhost:8182/')
 &gt;&gt;&gt; gc.run_until_complete(client(gc))
-# superslow
+# ['gremlin']
 # ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
 </code></pre>
 
@@ -270,7 +270,7 @@ def enqueue_dequeue_coro(gc):
 <p>Use dequeue_all to dequeue and execute all tasks in the order in which they were enqueued.</p>
 <pre><code class="python">@asyncio.coroutine
 def client(gc):
-    yield from gc.enqueue_task(superslow)
+    yield from gc.enqueue_task(sleepy)
     yield from gc.enqueue_task(gc.submit, &quot;g.V().values(name)&quot;,
         bindings={&quot;name&quot;: &quot;name&quot;})
     yield from gc.dequeue_all()
