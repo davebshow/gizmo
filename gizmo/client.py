@@ -9,15 +9,8 @@ import json
 import ssl
 import uuid
 import websockets
-from .exceptions import RequestError, GremlinServerError, SocketError
+from .handlers import status_error_handler, socket_error_handler
 from .response import GremlinResponse
-
-
-def error_handler(status_code, message):
-    if status_code < 500:
-        raise RequestError(status_code, message)
-    else:
-        raise GremlinServerError(status_code, message)
 
 
 class BaseGremlinClient:
@@ -105,8 +98,7 @@ class BaseGremlinClient:
         except TypeError:
             # Connection has already been established.
             websocket = self.sock
-        if not websocket.open:
-            raise SocketError("Socket has been closed.")
+        socket_error_handler(websocket)
         yield from websocket.send(json.dumps(payload))
         return websocket
 
@@ -332,10 +324,7 @@ class AsyncGremlinClient(BaseGremlinClient):
         This method manages the Gremlin Server passing the response to the recv
         method one message at a time.
         """
-        if self.sock is None:
-            raise SocketError("There is no socket connection.")
-        if not self.sock.open:
-            raise SocketError("Socket has been closed.")
+        socket_error_handler(self.sock)
         message = yield from self.sock.recv()
         message = json.loads(message)
         message = GremlinResponse(message)
@@ -344,7 +333,7 @@ class AsyncGremlinClient(BaseGremlinClient):
         elif message.status_code == 299:
             pass
         else:
-            error_handler(message.status_code, message.message)
+            status_error_handler(message.status_code, message.message)
 
     @asyncio.coroutine
     def run(self, consumer=None, collect=True):
@@ -355,10 +344,7 @@ class AsyncGremlinClient(BaseGremlinClient):
         :param consumer: func. Function to map to server messages.
         :param collect: bool. Retain server messages on client object.
         """
-        if self.sock is None:
-            raise SocketError("There is no socket connection.")
-        if not self.sock.open:
-            raise SocketError("Socket has been closed.")
+        socket_error_handler(self.sock)
         while True:
             message = yield from self.sock.recv()
             message = json.loads(message)
@@ -374,7 +360,7 @@ class AsyncGremlinClient(BaseGremlinClient):
             elif message.status_code == 299:
                 break
             else:
-                error_handler(message.status_code, message.message)
+                status_error_handler(message.status_code, message.message)
 
     def run_tasks(self):
         """
@@ -417,10 +403,7 @@ class GremlinClient(BaseGremlinClient):
         :param consumer: func. Function to map to server messages.
         :param collect: bool. Retain server messages on client object.
         """
-        if self.sock is None:
-            raise SocketError("There is no socket connection.")
-        if not self.sock.open:
-            raise SocketError("Socket has been closed.")
+        socket_error_handler(self.sock)
         while True:
             message = yield from self.sock.recv()
             message = json.loads(message)
@@ -433,7 +416,7 @@ class GremlinClient(BaseGremlinClient):
             elif message.status_code == 299:
                 break
             else:
-                error_handler(message.status_code, message.message)
+                status_error_handler(message.status_code, message.message)
 
     def execute(self, gremlin, bindings=None, lang="gremlin-groovy", op="eval",
                 processor="", consumer=None, collect=True):

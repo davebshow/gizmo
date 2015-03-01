@@ -1,3 +1,7 @@
+"""
+Basic test cases, will build a larger graph and make end2end tests.
+"""
+
 import asyncio
 import unittest
 from gizmo import (BaseGremlinClient, AsyncGremlinClient, GremlinClient,
@@ -36,7 +40,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
         @asyncio.coroutine
         def graph_open_coro():
             yield from self.client.task(self.client.submit,
-                                        "g = TinkerGraph.open()")
+                "g = TinkerGraph.open()")
             f = yield from self.client.messages.get()
             self.assertEqual(f.status_code, 200)
         self.client.run_until_complete(graph_open_coro())
@@ -44,37 +48,26 @@ class AsyncGremlinClientTests(unittest.TestCase):
     def test_03_node_edge_create(self):
         @asyncio.coroutine
         def node_edge_create_coro():
-            yield from self.client.task(
-                self.client.submit,
-                "g.V().remove(); g.E().remove();",
-                collect=False
-            )
+            yield from self.client.task(self.client.submit,
+                "g.V().remove(); g.E().remove();", collect=False)
 
-            yield from self.client.task(
-                self.client.submit,
+            yield from self.client.task(self.client.submit,
                 ("gremlin = g.addVertex(label,'software','name','gremlin');" +
                  "gremlin.property('created', 2009);" +
                  "blueprints = g.addVertex(label,'software','name','blueprints');" +
                  "gremlin.addEdge('dependsOn',blueprints);" +
                  "blueprints.property('created',2010);" +
-                 "blueprints.property('created').remove()"),
-                collect=False)
+                 "blueprints.property('created').remove()"), collect=False)
 
-            yield from self.client.task(
-                self.client.submit,
-                "g.V().count()")
+            yield from self.client.task(self.client.submit, "g.V().count()")
             f = yield from self.client.messages.get()
             self.assertEqual(f[0], 2)
 
-            yield from self.client.task(
-                self.client.submit,
-                "g.E().count()")
+            yield from self.client.task(self.client.submit, "g.E().count()")
             f = yield from self.client.messages.get()
             self.assertEqual(f[0], 1)
 
-            yield from self.client.task(
-                self.client.submit,
-                "g.V()")
+            yield from self.client.task(self.client.submit, "g.V()")
             nodes = ["gremlin", "blueprints"]
             f = yield from self.client.messages.get()
             label = f[0]["label"]
@@ -89,9 +82,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
             self.assertEqual(crtd, "")
             print("Successfully created node of type software: blueprints")
 
-            yield from self.client.task(
-                self.client.submit,
-                "g.E()")
+            yield from self.client.task(self.client.submit, "g.E()")
             f = yield from self.client.messages.get()
             label = f[0]["label"]
             in_label = f[0]["inVLabel"]
@@ -108,9 +99,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
     def test_04_consumer_return(self):
         @asyncio.coroutine
         def consumer_return_coro():
-            yield from self.client.task(
-                self.client.submit,
-                "1 + 1",
+            yield from self.client.task(self.client.submit, "1 + 1",
                 consumer=lambda x: x[0] ** 2)
             while not self.client.messages.empty():
                 f = yield from self.client.messages.get()
@@ -121,9 +110,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
     def test_05_consumer_noreturn(self):
         @asyncio.coroutine
         def consumer_noreturn_coro():
-            yield from self.client.task(
-                self.client.submit,
-                "1 + 1",
+            yield from self.client.task(self.client.submit, "1 + 1",
                 consumer=lambda x: print(x[0] ** 2))
             self.assertTrue(self.client.messages.empty())
             print("Consumer did not add results to messages")
@@ -134,11 +121,8 @@ class AsyncGremlinClientTests(unittest.TestCase):
     def test_06_collect_false(self):
         @asyncio.coroutine
         def consumer_return_coro():
-            yield from self.client.task(
-                self.client.submit,
-                "1 + 1",
-                consumer=lambda x: x[0] ** 2,
-                collect=False)
+            yield from self.client.task(self.client.submit, "1 + 1",
+                consumer=lambda x: x[0] ** 2, collect=False)
             self.assertTrue(self.client.messages.empty())
             print("No collection performed")
         self.client.run_until_complete(consumer_return_coro())
@@ -150,16 +134,13 @@ class AsyncGremlinClientTests(unittest.TestCase):
         if consumer is None:
             consumer = lambda x: x[0]
         yield from asyncio.sleep(0.25)
-        yield from self.client.task(
-            self.client.submit,
+        yield from self.client.task(    self.client.submit,
             "g.V().has(n, val).values(n)",
-            bindings={"n": "name", "val": "gremlin"},
-            consumer=consumer)
+            bindings={"n": "name", "val": "gremlin"},consumer=consumer)
 
     def test_07_parallel_tasks(self):
         task1 = self.client.add_task(self.slowjson)
-        task2 = self.client.add_task(
-            self.client.submit,
+        task2 = self.client.add_task(self.client.submit,
             "g.V().has(n, val).values(n)",
             bindings={"n": "name", "val": "blueprints"},
             consumer=lambda x: x[0])
@@ -182,8 +163,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
         @asyncio.coroutine
         def enqueue_dequeue_coro():
             yield from self.client.enqueue_task(self.slowjson)
-            yield from self.client.enqueue_task(
-                self.client.submit,
+            yield from self.client.enqueue_task(self.client.submit,
                 "g.V().has(n, val).values(n)",
                 bindings={"n": "name", "val": "blueprints"},
                 consumer=lambda x: x[0])
@@ -202,11 +182,9 @@ class AsyncGremlinClientTests(unittest.TestCase):
         messages = []
         @asyncio.coroutine
         def dequeue_all_coro():
-            yield from self.client.enqueue_task(
-                self.slowjson,
+            yield from self.client.enqueue_task(self.slowjson,
                 consumer=lambda x: x[0])
-            yield from self.client.enqueue_task(
-                self.client.submit,
+            yield from self.client.enqueue_task(self.client.submit,
                 "g.V().has(n, val).values(n)",
                 bindings={"n": "name", "val": "blueprints"},
                 consumer=lambda x: x[0])
@@ -243,8 +221,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
         def enqueue_all_coro():
             yield from self.client.enqueue_task(self.slowjson,
                 consumer=lambda x: x[0])
-            yield from self.client.enqueue_task(
-                self.client.submit,
+            yield from self.client.enqueue_task(self.client.submit,
                 "g.V().has(n, val).values(n)",
                 bindings={"n": "name", "val": "blueprints"},
                 consumer=lambda x: x[0])
@@ -386,15 +363,12 @@ class GremlinClientTests(unittest.TestCase):
         self.client.run_until_complete(conn_coro())
 
     def test_execute(self):
-        self.client.execute(
-            "g.V().has(n, val).values(n)",
+        self.client.execute("g.V().has(n, val).values(n)",
             bindings={"n": "name", "val": "blueprints"},
             consumer=lambda x: x[0])
         self.assertEqual(self.client._messages[0], "blueprints")
-        self.client.execute(
-            "g.V().has(n, val).values(n)",
-            bindings={"n": "name", "val": "gremlin"},
-            consumer=lambda x: x[0])
+        self.client.execute("g.V().has(n, val).values(n)",
+            bindings={"n": "name", "val": "gremlin"}, consumer=lambda x: x[0])
         self.assertEqual(self.client._messages[1], "gremlin")
         for x in self.client:
             print("Retrieved: {}".format(x))

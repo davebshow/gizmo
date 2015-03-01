@@ -1,4 +1,4 @@
-# gizmo 0.1.6
+# gizmo 0.1.7
 
 **API BREAKING CHANGES HAVE OCCURRED BETWEEN 0.1.4 AND 0.1.5 - AsyncGremlinClient.send_receive is now AsyncGremlinClient.submit**
 
