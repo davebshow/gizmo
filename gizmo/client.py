@@ -62,9 +62,9 @@ class BaseGremlinClient:
 
     @asyncio.coroutine
     def submit(self, gremlin, bindings=None, lang="gremlin-groovy",
-               op="eval", processor="", consumer=None, collect=True):
+            op="eval", processor="", consumer=None, collect=True):
         yield from self.send(gremlin, bindings=bindings, lang=lang, op=op,
-                             processor=processor)
+            processor=processor)
         yield from self.run(consumer=consumer, collect=collect)
 
     def run_until_complete(self, func):
@@ -109,19 +109,19 @@ class AsyncGremlinClient(BaseGremlinClient):
     @asyncio.coroutine
     def enqueue_task(self, coro, *args, **kwargs):
         task = (coro, args, kwargs)
-        yield from self.task_queue.put(task)
+        self.task_queue.put_nowait(task)
 
     @asyncio.coroutine
     def dequeue_task(self):
         if not self.task_queue.empty():
-            coro, args, kwargs = yield from self.task_queue.get()
+            coro, args, kwargs = self.task_queue.get_nowait()
             task = self.task(coro, *args, **kwargs)
             return (yield from task)
 
     @asyncio.coroutine
     def dequeue_all(self):
         while not self.task_queue.empty():
-            coro, args, kwargs = yield from self.task_queue.get()
+            coro, args, kwargs = self.task_queue.get_nowait()
             task = self.task(coro, *args, **kwargs)
             f = yield from task
 
@@ -161,7 +161,7 @@ class AsyncGremlinClient(BaseGremlinClient):
         message = json.loads(message)
         message = GremlinResponse(message)
         if message.status_code == 200:
-            yield from self.messages.put(message)
+            self.messages.put_nowait(message)
         elif message.status_code == 299:
             pass
         else:
@@ -185,7 +185,7 @@ class AsyncGremlinClient(BaseGremlinClient):
                     else:
                         message = consumer(message)
                 if message and collect:
-                    yield from self.messages.put(message)
+                    self.messages.put_nowait(message)
             elif message.status_code == 299:
                 break
             else:
