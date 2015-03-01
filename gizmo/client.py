@@ -152,8 +152,18 @@ class BaseGremlinClient:
 
 class AsyncGremlinClient(BaseGremlinClient):
 
-    def __init__(self, uri='ws://localhost:8182/', loop=None, **kwargs):
-        super().__init__(uri=uri, loop=loop, **kwargs)
+    def __init__(self, uri='ws://localhost:8182/', loop=None, ssl=None,
+                 protocol=None, **kwargs):
+        """
+        Asynchronous Client for the asyncio API.
+
+        :param uri: str. Database uri.
+        :param loop: asyncio.BaseEventLoop.
+        :param ssl: str. Path to ssl certfile.
+        :param protocol: ssl.PROTOCOL.
+        """
+        super().__init__(uri='ws://localhost:8182/', loop=None, ssl=None,
+            protocol=None, **kwargs)
         self._messages = asyncio.Queue()
         self._tasks = []
         self._task_queue = asyncio.Queue()
@@ -375,12 +385,19 @@ class AsyncGremlinClient(BaseGremlinClient):
 
 class GremlinClient(BaseGremlinClient):
 
-    def __init__(self, uri='ws://localhost:8182/', loop=None, **kwargs):
+    def __init__(self, uri='ws://localhost:8182/', loop=None, ssl=None,
+                 protocol=None, **kwargs):
         """
         This class provides a one method API (.execute) that does not require
         any use of the asyncio API. It is a candidate for deprication.
+
+        :param uri: str. Database uri.
+        :param loop: asyncio.BaseEventLoop.
+        :param ssl: str. Path to ssl certfile.
+        :param protocol: ssl.PROTOCOL.
         """
-        super().__init__(uri=uri, loop=loop, **kwargs)
+        super().__init__(uri='ws://localhost:8182/', loop=None, ssl=None,
+            protocol=None, **kwargs)
         self._messages = []
 
     def get_messages(self):
