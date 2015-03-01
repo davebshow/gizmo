@@ -95,7 +95,7 @@ $ pip install gizmo
 </code></pre>
 
 <h3 id="basic-api">Basic API</h3>
-<p>At it's most basic, the AsyncGremlinClient allows to send and receive message through a socket. The GremlinServer sends reponses in chunks, so it is important to keep receiving messages until the AsyncGremlinClient.recv returns None. Observe:</p>
+<p>At its most basic, the AsyncGremlinClient allows to send and receive message through a socket. The GremlinServer sends reponses in chunks, so it is important to keep receiving messages until the AsyncGremlinClient.recv returns None. Observe:</p>
 <pre><code class="python">@asyncio.coroutine
 def recv_coro(gc):
     yield from gc.send(&quot;g.V().has(n, val).values(n)&quot;,
