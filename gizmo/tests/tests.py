@@ -284,7 +284,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
     def test_13_recv(self):
         @asyncio.coroutine
         def recv_coro():
-            yield from self.client.send("g.V().has(n, ",
+            yield from self.client.send("g.V().has(n, val).values(n)",
                 bindings={"n": "name", "val": "gremlin"})
             while True:
                 f = yield from self.client.recv()
