@@ -27,6 +27,11 @@ class BaseGremlinClient:
         """
         Base class for Gremlin clients. Handles ssl, websocket.send, and
         event loop.
+
+        :param uri: str. Database uri.
+        :param loop: asyncio.BaseEventLoop.
+        :param ssl: str. Path to ssl certfile.
+        :param protocol: ssl.PROTOCOL.
         """
         self.uri = uri
         # SLL is untested. Need to set up secure server and try it out.
@@ -36,6 +41,7 @@ class BaseGremlinClient:
             ssl_context = ssl.SSLContext(protocol)
             ssl_context.load_verify_locations(ssl)
             ssl_context.verify_mode = ssl.CERT_REQUIRED
+            # Passed through to websockets.connect
             kwargs['ssl'] = ssl_context
         self._loop = loop or asyncio.get_event_loop()
         self._connector = asyncio.async(self.connect(**kwargs), loop=self._loop)
@@ -310,7 +316,6 @@ class AsyncGremlinClient(BaseGremlinClient):
             f, = done  # Unpack set.
             f.result() # None or raise Error.
 
-
     @asyncio.coroutine
     def _receive(self):
         """
@@ -330,7 +335,6 @@ class AsyncGremlinClient(BaseGremlinClient):
             pass
         else:
             error_handler(message.status_code, message.message)
-
 
     @asyncio.coroutine
     def run(self, consumer=None, collect=True):
