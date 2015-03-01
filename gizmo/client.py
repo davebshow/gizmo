@@ -3,7 +3,13 @@ import json
 import ssl
 import uuid
 import websockets
+from .exceptions import StatusException
 from .response import GremlinResponse
+
+
+@asyncio.coroutine
+def error_handler(status_code, message):
+    raise StatusException(status_code, message)
 
 
 class BaseGremlinClient:
@@ -134,23 +140,25 @@ class AsyncGremlinClient(BaseGremlinClient):
     @asyncio.coroutine
     def recv(self):
         """
-        This recv is based on websockets, it works a bit differntly though,
-        because it calls self.run, (the original calls the protocol worker
-        that controls the websocket connection). This basically just hooks the
-        GremlinClient.run into the server response, and sends the output to
-        the end user.
+        This recv is based on the websockets.WebSocketCommonProtocol.recv, but
+        it uses AsyncGremlinClinet._receive to manage the Gremlin Server
+        response (the original uses a worker task to manage the websocket conn.)
         https://github.com/aaugustin/websockets/blob/master/websockets/protocol.py#L150
         """
         try:
             return self.messages.get_nowait()
         except asyncio.QueueEmpty:
             pass
+        # Future message to be enqueued by _receive method
         next_message = asyncio.async(self.messages.get(), loop=self._loop)
+        # If a message is enqueued, return message future, else return None
         done, pending = yield from asyncio.wait(
             [next_message, asyncio.async(self._receive())],
             loop=self._loop, return_when=asyncio.FIRST_COMPLETED)
+        # If message completed future was returned
         if next_message in done:
             return next_message.result()
+        # Cancel the future, recv returns None.
         else:
             next_message.cancel()
 
@@ -165,11 +173,12 @@ class AsyncGremlinClient(BaseGremlinClient):
         elif message.status_code == 299:
             pass
         else:
-            # Error handler here.
-            verbose = "Request {} failed with status code {}: {}".format(
-                message.request_id, message.status_code, message.message)
-            self._errors.append(verbose)
-            print(verbose)
+            try:
+                yield from error_handler(message.status_code, message.message)
+            except StatusException as exc:
+                self.errors.append(exc)
+                self._loop.call_exception_handler({"message": exc.message,
+                    "exception": exc})
 
     @asyncio.coroutine
     def run(self, consumer=None, collect=True):
@@ -189,11 +198,13 @@ class AsyncGremlinClient(BaseGremlinClient):
             elif message.status_code == 299:
                 break
             else:
-                # Error handler here.
-                verbose = "Request {} failed with status code {}: {}".format(
-                    message.request_id, message.status_code, message.message)
-                self._errors.append(verbose)
-                print(verbose)
+                try:
+                    yield from error_handler(message.status_code,
+                        message.message)
+                except StatusException as exc:
+                    self.errors.append(exc)
+                    self._loop.call_exception_handler({"message": exc.message,
+                        "exception": exc})
 
     def run_tasks(self):
         self.run_until_complete(asyncio.wait(self.tasks))
@@ -243,3 +254,23 @@ class GremlinClient(BaseGremlinClient):
             processor=processor, consumer=consumer, collect=collect)
         self.run_until_complete(coro)
         return self
+
+
+gc = AsyncGremlinClient()
+
+
+@asyncio.coroutine
+def recv_coro(gc):
+    yield from gc.send("g.V().has(n, ",
+        bindings={"n": "name", "val": "gremlin"})
+    while True:
+        try:
+            f = yield from gc.recv()
+            if f is None:
+                break
+        except:
+            print("skipped")
+        print("Simple recv yielded {}".format(f))
+
+
+gc.run_until_complete(recv_coro(gc))

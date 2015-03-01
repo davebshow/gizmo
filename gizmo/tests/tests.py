@@ -281,6 +281,20 @@ class AsyncGremlinClientTests(unittest.TestCase):
                 print("Simple recv yielded {}".format(f))
         self.client.run_until_complete(coroutine_consumer_coro())
 
+    def test_13_recv(self):
+        @asyncio.coroutine
+        def recv_coro():
+            yield from self.client.send("g.V().has(n, ",
+                bindings={"n": "name", "val": "gremlin"})
+            while True:
+                f = yield from self.client.recv()
+                if f is None:
+                    break
+                self.assertEqual(f[0], "gremlin")
+                print("Simple recv yielded {}".format(f))
+        self.client.run_until_complete(recv_coro())
+
+
 
 class GremlinClientTests(unittest.TestCase):
 
