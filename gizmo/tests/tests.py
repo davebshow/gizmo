@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 from gizmo import (BaseGremlinClient, AsyncGremlinClient, GremlinClient,
-    RequestError, GremlinServerError)
+    RequestError, GremlinServerError, SocketError)
 
 
 class BaseGremlinClientTests(unittest.TestCase):
@@ -343,6 +343,34 @@ class AsyncGremlinClientTests(unittest.TestCase):
         print("First result is fast: blueprints")
         self.assertEqual(results[1], "gremlin")
         print("Second result is slow: gremlin")
+
+    def test_17_recv_socket_error(self):
+        @asyncio.coroutine
+        def recv_socket_error_coro():
+            error = None
+            while True:
+                try:
+                    f = yield from self.client.recv()
+                except SocketError as e:
+                    error = e
+                    break
+            self.assertTrue(isinstance(error, SocketError))
+            print("recv returned {}".format(error))
+        self.client.run_until_complete(recv_socket_error_coro())
+
+    def test_18_run_socket_error(self):
+        @asyncio.coroutine
+        def run_socket_error_coro():
+            error = None
+            while True:
+                try:
+                    f = yield from self.client.run()
+                except SocketError as e:
+                    error = e
+                    break
+            self.assertTrue(isinstance(error, SocketError))
+            print("run returned {}".format(error))
+        self.client.run_until_complete(run_socket_error_coro())
 
 
 class GremlinClientTests(unittest.TestCase):

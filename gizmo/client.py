@@ -9,7 +9,7 @@ import json
 import ssl
 import uuid
 import websockets
-from .exceptions import RequestError, GremlinServerError
+from .exceptions import RequestError, GremlinServerError, SocketError
 from .response import GremlinResponse
 
 
@@ -38,7 +38,8 @@ class BaseGremlinClient:
             ssl_context.verify_mode = ssl.CERT_REQUIRED
             kwargs['ssl'] = ssl_context
         self._loop = loop or asyncio.get_event_loop()
-        self._sock = asyncio.async(self.connect(**kwargs), loop=self._loop)
+        self._connector = asyncio.async(self.connect(**kwargs), loop=self._loop)
+        self._sock = None
 
     def get_sock(self):
         """
@@ -49,6 +50,15 @@ class BaseGremlinClient:
         return self._sock
     sock = property(get_sock)
 
+    def get_connector(self):
+        """
+        Read only access to the connector coroutine task.
+
+        :returns: asyncio.Task
+        """
+        return self._connector
+    connector = property(get_connector)
+
     @asyncio.coroutine
     def connect(self, **kwargs):
         """
@@ -57,6 +67,7 @@ class BaseGremlinClient:
         :returns: websockets.WebSocketClientProtocol
         """
         websocket = yield from websockets.connect(self.uri, **kwargs)
+        self._sock = websocket
         return websocket
 
     @asyncio.coroutine
@@ -83,10 +94,13 @@ class BaseGremlinClient:
             }
         }
         try:
-            websocket = yield from self.sock
-            self._sock = websocket
+            # This is the initial connection.
+            websocket = yield from self.connector
         except TypeError:
+            # Connection has already been established.
             websocket = self.sock
+        if not websocket.open:
+            raise SocketError("Socket has been closed.")
         yield from websocket.send(json.dumps(payload))
         return websocket
 
@@ -285,7 +299,7 @@ class AsyncGremlinClient(BaseGremlinClient):
         next_message = asyncio.async(self.messages.get(), loop=self._loop)
         # If message return message future, else return None (or set_exception).
         done, pending = yield from asyncio.wait(
-            [next_message, asyncio.async(self._receive())],
+            [next_message, asyncio.async(self._receive(), loop=self._loop)],
             loop=self._loop, return_when=asyncio.FIRST_COMPLETED)
         # If message completed future was returned.
         if next_message in done:
@@ -293,7 +307,7 @@ class AsyncGremlinClient(BaseGremlinClient):
         # Cancel the future, recv returns None or raises Error.
         else:
             next_message.cancel()
-            f, = done  # Unpack set. 
+            f, = done  # Unpack set.
             f.result() # None or raise Error.
 
 
@@ -303,8 +317,11 @@ class AsyncGremlinClient(BaseGremlinClient):
         This method manages the Gremlin Server passing the response to the recv
         method one message at a time.
         """
-        websocket = self.sock
-        message = yield from websocket.recv()
+        if self.sock is None:
+            raise SocketError("There is no socket connection.")
+        if not self.sock.open:
+            raise SocketError("Socket has been closed.")
+        message = yield from self.sock.recv()
         message = json.loads(message)
         message = GremlinResponse(message)
         if message.status_code == 200:
@@ -324,9 +341,12 @@ class AsyncGremlinClient(BaseGremlinClient):
         :param consumer: func. Function to map to server messages.
         :param collect: bool. Retain server messages on client object.
         """
-        websocket = self.sock
+        if self.sock is None:
+            raise SocketError("There is no socket connection.")
+        if not self.sock.open:
+            raise SocketError("Socket has been closed.")
         while True:
-            message = yield from websocket.recv()
+            message = yield from self.sock.recv()
             message = json.loads(message)
             message = GremlinResponse(message)
             if message.status_code == 200:
@@ -346,7 +366,7 @@ class AsyncGremlinClient(BaseGremlinClient):
         """
         Run all tasks in tasks list in "parallel"
         """
-        self.run_until_complete(asyncio.wait(self.tasks))
+        self.run_until_complete(asyncio.wait(self.tasks, loop=self._loop))
 
 
 class GremlinClient(BaseGremlinClient):
@@ -376,9 +396,12 @@ class GremlinClient(BaseGremlinClient):
         :param consumer: func. Function to map to server messages.
         :param collect: bool. Retain server messages on client object.
         """
-        websocket = self.sock
+        if self.sock is None:
+            raise SocketError("There is no socket connection.")
+        if not self.sock.open:
+            raise SocketError("Socket has been closed.")
         while True:
-            message = yield from websocket.recv()
+            message = yield from self.sock.recv()
             message = json.loads(message)
             message = GremlinResponse(message)
             if message.status_code == 200:

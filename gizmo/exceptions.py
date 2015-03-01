@@ -4,6 +4,10 @@ gizmo.exceptions
 This module defines exceptions for the Gremlin Server.
 """
 
+class SocketError(IOError):
+    pass
+
+
 class StatusException(IOError):
 
     def __init__(self, value, result):
