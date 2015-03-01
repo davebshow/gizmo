@@ -107,7 +107,7 @@ def recv_coro(gc):
         self.assertEqual(f[0], &quot;gremlin&quot;)
 
 
-gc.run_until_complete(recv_coro(gc))
+&gt;&gt;&gt; gc.run_until_complete(recv_coro(gc))
 </code></pre>
 
 <h3 id="message-queue-api">Message queue API</h3>

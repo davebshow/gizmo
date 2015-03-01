@@ -50,7 +50,7 @@ def recv_coro(gc):
         self.assertEqual(f[0], "gremlin")
 
 
-gc.run_until_complete(recv_coro(gc))
+>>> gc.run_until_complete(recv_coro(gc))
 ```
 
 ### Message queue API
