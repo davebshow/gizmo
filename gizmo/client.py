@@ -61,8 +61,8 @@ class BaseGremlinClient:
         raise NotImplementedError
 
     @asyncio.coroutine
-    def send_receive(self, gremlin, bindings=None, lang="gremlin-groovy",
-                     op="eval", processor="", consumer=None, collect=True):
+    def submit(self, gremlin, bindings=None, lang="gremlin-groovy",
+               op="eval", processor="", consumer=None, collect=True):
         yield from self.send(gremlin, bindings=bindings, lang=lang, op=op,
                              processor=processor)
         yield from self.run(consumer=consumer, collect=collect)
@@ -75,18 +75,26 @@ class AsyncGremlinClient(BaseGremlinClient):
 
     def __init__(self, uri='ws://localhost:8182/', loop=None, **kwargs):
         super().__init__(uri=uri, loop=loop, **kwargs)
-        self.messages = asyncio.Queue()
+        self._messages = asyncio.Queue()
         self._tasks = []
-        self.task_queue = asyncio.Queue()
+        self._task_queue = asyncio.Queue()
+
+    def get_messages(self):
+        return self._messages
+    messages = property(get_messages)
 
     def get_tasks(self):
         return self._tasks
     tasks = property(get_tasks)
 
+    def get_task_queue(self):
+        return self._task_queue
+    task_queue = property(get_task_queue)
+
     @asyncio.coroutine
     def read(self):
         try:
-            return (yield from self.messages.get_nowait())
+            return self.messages.get_nowait()
         except asyncio.QueueEmpty:
             pass
 
@@ -126,7 +134,7 @@ class AsyncGremlinClient(BaseGremlinClient):
     @asyncio.coroutine
     def recv(self):
         """
-        This recv is taken from websockets, it works a bit differntly though,
+        This recv is based on websockets, it works a bit differntly though,
         because it calls self.run, (the original calls the protocol worker
         that controls the websocket connection). This basically just hooks the
         GremlinClient.run into the server response, and sends the output to
@@ -137,28 +145,45 @@ class AsyncGremlinClient(BaseGremlinClient):
             return self.messages.get_nowait()
         except asyncio.QueueEmpty:
             pass
-        # Wait for a message until the connection is closed
         next_message = asyncio.async(self.messages.get(), loop=self._loop)
         done, pending = yield from asyncio.wait(
-                [next_message, asyncio.async(self.run())],
-                loop=self._loop, return_when=asyncio.FIRST_COMPLETED)
+            [next_message, asyncio.async(self._receive())],
+            loop=self._loop, return_when=asyncio.FIRST_COMPLETED)
         if next_message in done:
             return next_message.result()
         else:
             next_message.cancel()
 
     @asyncio.coroutine
+    def _receive(self):
+        websocket = self.sock
+        message = yield from websocket.recv()
+        message = json.loads(message)
+        message = GremlinResponse(message)
+        if message.status_code == 200:
+            yield from self.messages.put(message)
+        elif message.status_code == 299:
+            pass
+        else:
+            # Error handler here.
+            verbose = "Request {} failed with status code {}: {}".format(
+                message.request_id, message.status_code, message.message)
+            self._errors.append(verbose)
+            print(verbose)
+
+    @asyncio.coroutine
     def run(self, consumer=None, collect=True):
         websocket = self.sock
         while True:
-            # Will need to handle error here if websocket no message has been
-            # sent.
             message = yield from websocket.recv()
             message = json.loads(message)
             message = GremlinResponse(message)
             if message.status_code == 200:
                 if consumer:
-                    message = consumer(message)
+                    if asyncio.iscoroutine(consumer):
+                        message = yield from consumer(message)
+                    else:
+                        message = consumer(message)
                 if message and collect:
                     yield from self.messages.put(message)
             elif message.status_code == 299:
@@ -214,7 +239,7 @@ class GremlinClient(BaseGremlinClient):
 
     def execute(self, gremlin, bindings=None, lang="gremlin-groovy", op="eval",
                 processor="", consumer=None, collect=True):
-        coro = self.send_receive(gremlin, bindings=bindings, lang=lang, op=op,
+        coro = self.submit(gremlin, bindings=bindings, lang=lang, op=op,
             processor=processor, consumer=consumer, collect=collect)
         self.run_until_complete(coro)
         return self
