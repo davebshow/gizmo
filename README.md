@@ -119,7 +119,7 @@ def sleepy(gc):
 >>> for x in gc:
 ...     print(x)
 # ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
-# superslow
+# ['gremlin']
 ```
 
 ### GremlinResponse
