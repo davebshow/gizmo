@@ -36,7 +36,7 @@ The AsyncGremlinClient uses asyncio and websockets to communicate asynchronously
 
 ### Basic API
 
-At it's most basic, the AsyncGremlinClient allows to send and receive message through a socket. The GremlinServer sends reponses in chunks, so it is important to keep receiving messages until the AsyncGremlinClient.recv returns None. Observe:
+At its most basic, the AsyncGremlinClient allows to send and receive message through a socket. The GremlinServer sends reponses in chunks, so it is important to keep receiving messages until the AsyncGremlinClient.recv returns None. Observe:
 
 ```python
 @asyncio.coroutine
