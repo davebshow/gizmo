@@ -9,6 +9,7 @@ import json
 import ssl
 import uuid
 import websockets
+from .exceptions import SocketError
 from .handlers import status_error_handler, socket_error_handler
 from .response import GremlinResponse
 
@@ -98,7 +99,12 @@ class BaseGremlinClient:
         except TypeError:
             # Connection has already been established.
             websocket = self.sock
-        socket_error_handler(websocket)
+        # Try to reconnect in case of socket close.
+        try:
+            socket_error_handler(websocket)
+        except SocketError:
+            connector = asyncio.async(self.connect(), loop=self._loop)
+            websocket = yield from connector
         yield from websocket.send(json.dumps(payload))
         return websocket
 
@@ -201,6 +207,7 @@ class AsyncGremlinClient(BaseGremlinClient):
         except asyncio.QueueEmpty:
             raise StopIteration
 
+    # No coroutine...
     @asyncio.coroutine
     def read(self):
         """
@@ -224,6 +231,35 @@ class AsyncGremlinClient(BaseGremlinClient):
         """
         return asyncio.async(coro(*args, **kwargs), loop=self._loop)
 
+    # All shortcuts need tests
+    def t(self, *args, **kwargs):
+        """
+        Convenience method that combines task and submit.
+        """
+        return asyncio.async(self.submit(*args, **kwargs), loop=self._loop)
+
+    def at(self, *args, **kwargs):
+        """
+        Convenience method that combines add_task and submit.
+        """
+        task = self.t(*args, **kwargs)
+        self._tasks.append(task)
+        return task
+
+    def ss(self, *args, **kwargs):
+        """
+        Convenience method that performs a "synchronous submit".
+        """
+        task = self.t(*args, **kwargs)
+        self.run_until_complete(task)
+
+    def st(self, coro, *args, **kwargs):
+        """
+        Convenience method that performs a "synchronous task".
+        """
+        task = asyncio.async(coro(*args, **kwargs), loop=self._loop)
+        self.run_until_complete(task)
+
     def add_task(self, coro, *args, **kwargs):
         """
         Add a task to the list of tasks.
@@ -237,7 +273,6 @@ class AsyncGremlinClient(BaseGremlinClient):
         self._tasks.append(task)
         return task
 
-    @asyncio.coroutine
     def enqueue_task(self, coro, *args, **kwargs):
         """
         Enqueue a task on the task_queue.
@@ -326,14 +361,17 @@ class AsyncGremlinClient(BaseGremlinClient):
         """
         socket_error_handler(self.sock)
         message = yield from self.sock.recv()
+
         message = json.loads(message)
         message = GremlinResponse(message)
+
         if message.status_code == 200:
             self.messages.put_nowait(message)
         elif message.status_code == 299:
             pass
         else:
             status_error_handler(message.status_code, message.message)
+
 
     @asyncio.coroutine
     def run(self, consumer=None, collect=True):
@@ -361,6 +399,7 @@ class AsyncGremlinClient(BaseGremlinClient):
                 break
             else:
                 status_error_handler(message.status_code, message.message)
+
 
     def run_tasks(self):
         """
