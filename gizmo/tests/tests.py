@@ -7,6 +7,11 @@ import unittest
 from gizmo import (BaseGremlinClient, AsyncGremlinClient, GremlinClient,
     RequestError, GremlinServerError, SocketError)
 
+@asyncio.coroutine
+def consumer_coro(x):
+    yield from asyncio.sleep(0.25)
+    return x[0] ** 2
+
 
 class BaseGremlinClientTests(unittest.TestCase):
 
@@ -162,8 +167,8 @@ class AsyncGremlinClientTests(unittest.TestCase):
     def test_08_enqueue_dequeue(self):
         @asyncio.coroutine
         def enqueue_dequeue_coro():
-            yield from self.client.enqueue_task(self.slowjson)
-            yield from self.client.enqueue_task(self.client.submit,
+            self.client.enqueue_task(self.slowjson)
+            self.client.enqueue_task(self.client.submit,
                 "g.V().has(n, val).values(n)",
                 bindings={"n": "name", "val": "blueprints"},
                 consumer=lambda x: x[0])
@@ -182,15 +187,15 @@ class AsyncGremlinClientTests(unittest.TestCase):
         messages = []
         @asyncio.coroutine
         def dequeue_all_coro():
-            yield from self.client.enqueue_task(self.slowjson,
+            self.client.enqueue_task(self.slowjson,
                 consumer=lambda x: x[0])
-            yield from self.client.enqueue_task(self.client.submit,
+            self.client.enqueue_task(self.client.submit,
                 "g.V().has(n, val).values(n)",
                 bindings={"n": "name", "val": "blueprints"},
                 consumer=lambda x: x[0])
             yield from self.client.dequeue_all()
             while True:
-                mssg = yield from self.client.read()
+                mssg = self.client.read()
                 if mssg is None:
                     break
                 messages.append(mssg)
@@ -219,9 +224,9 @@ class AsyncGremlinClientTests(unittest.TestCase):
 
         @asyncio.coroutine
         def enqueue_all_coro():
-            yield from self.client.enqueue_task(self.slowjson,
+            self.client.enqueue_task(self.slowjson,
                 consumer=lambda x: x[0])
-            yield from self.client.enqueue_task(self.client.submit,
+            self.client.enqueue_task(self.client.submit,
                 "g.V().has(n, val).values(n)",
                 bindings={"n": "name", "val": "blueprints"},
                 consumer=lambda x: x[0])
@@ -243,19 +248,19 @@ class AsyncGremlinClientTests(unittest.TestCase):
         self.client.run_until_complete(recv_coro())
 
     def test_12_coroutine_consumer(self):
-        @asyncio.coroutine
-        def consumer_coro(x):
-            yield from asyncio.sleep(0)
-            return x[0] ** 2
+
 
         @asyncio.coroutine
         def coroutine_consumer_coro():
             yield from self.client.submit("2 + 2", consumer=consumer_coro)
+
+            res = []
             while True:
-                f = yield from self.client.read()
+                f = self.client.read()
+                res.append(f)
                 if f is None:
                     break
-                self.assertEqual(f, 16)
+                self.assertEqual(res[0], 16)
                 print("Simple recv yielded {}".format(f))
         self.client.run_until_complete(coroutine_consumer_coro())
 

@@ -68,7 +68,7 @@ class BaseGremlinClient:
         """
         websocket = yield from websockets.connect(self.uri, **kwargs)
         self._sock = websocket
-        return websocket
+        return self._sock
 
     @asyncio.coroutine
     def send(self, gremlin, bindings=None, lang="gremlin-groovy", op="eval",
@@ -93,13 +93,7 @@ class BaseGremlinClient:
                 "language":  lang
             }
         }
-        try:
-            # This is the initial connection.
-            websocket = yield from self.connector
-        except TypeError:
-            # Connection has already been established.
-            websocket = self.sock
-        # Try to reconnect in case of socket close.
+        websocket = self.sock
         try:
             socket_error_handler(websocket)
         except SocketError:
@@ -208,7 +202,6 @@ class AsyncGremlinClient(BaseGremlinClient):
             raise StopIteration
 
     # No coroutine...
-    @asyncio.coroutine
     def read(self):
         """
         Read off the message queue.
@@ -389,10 +382,9 @@ class AsyncGremlinClient(BaseGremlinClient):
             message = GremlinResponse(message)
             if message.status_code == 200:
                 if consumer:
-                    if asyncio.iscoroutine(consumer):
-                        message = yield from consumer(message)
-                    else:
-                        message = consumer(message)
+                    message = consumer(message)
+                    if asyncio.iscoroutine(message):
+                        message = yield from asyncio.async(message)
                 if message and collect:
                     self.messages.put_nowait(message)
             elif message.status_code == 299:
