@@ -40,8 +40,7 @@ def parse_struct(struct):
     for k, v in struct.items():
         if k != "properties":
             output[k] = v
-    # This looses part of the response. I'm not familiar yet with
-    # how property ids and property properties work yet. May change.
+    # TODO - Make sure no info is being lost here.
     properties = {k: [val["value"] for val in v] for (k, v) in
         struct["properties"].items()}
     output.update(properties)
