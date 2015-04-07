@@ -14,7 +14,7 @@ from .handlers import status_error_handler, socket_error_handler
 from .response import GremlinResponse
 
 
-def task(coro, *args, **kwargs):
+def task(coro, **kwargs):
     return Task(coro, **kwargs)
 
 
