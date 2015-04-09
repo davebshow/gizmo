@@ -14,8 +14,8 @@ from .handlers import status_error_handler, socket_error_handler
 from .response import GremlinResponse
 
 
-def task(coro, *args, **kwargs):
-    return Subtask(coro, **kwargs)
+def task(coro, **kwargs):
+    return Task(coro, **kwargs)
 
 
 def group(*args, **kwargs):
@@ -30,7 +30,7 @@ def chord(itrbl, callback, **kwargs):
     return Chord(itrbl, callback, **kwargs)
 
 
-class Subtask:
+class Task:
 
     def __init__(self, coro, **kwargs):
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
@@ -46,7 +46,7 @@ class Subtask:
         self.loop.run_until_complete(self.task)
 
 
-class Group(Subtask):
+class Group(Task):
 
     def __init__(self, *args, **kwargs):
         if len(args) == 1:
@@ -55,7 +55,7 @@ class Group(Subtask):
         self.coro = asyncio.wait([t.coro for t in args], loop=self.loop)
 
 
-class Chain(Subtask):
+class Chain(Task):
 
     def __init__(self, *args, **kwargs):
         if len(args) == 1:
