@@ -60,6 +60,7 @@ class Group(Task):
         if len(args) == 1:
             args = args[0]
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
+        # Maybe custom call here too!
         tasks = asyncio.wait([t.coro for t in args], loop=self.loop,
             return_when=asyncio.FIRST_EXCEPTION)
         self.coro = self.wait_error_handler(tasks)
@@ -83,6 +84,7 @@ class Chain(Group):
         task_queue = asyncio.Queue()
         for t in args:
             task_queue.put_nowait(t)
+        ## THis is messing up flow control - implement custom call
         task = asyncio.async(self.dequeue(task_queue), loop=self.loop)
         self.coro = self.error_handler(task)
 
@@ -105,9 +107,9 @@ class Chord(Chain):
         task_queue = asyncio.Queue()
         task_queue.put_nowait(tasks)
         task_queue.put_nowait(callback)
+        ## THis is messing up flow control - implement custom call
         task = asyncio.async(self.dequeue(task_queue), loop=self.loop)
         self.coro = self.error_handler(task)
-
 
 class AsyncGremlinClient:
 
