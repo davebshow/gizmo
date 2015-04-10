@@ -4,7 +4,7 @@ Basic test cases, will build a larger graph and make end2end tests.
 
 import asyncio
 import unittest
-from gizmo import (AsyncGremlinClient, task, group, chain, chord, RequestError,
+from gizmo import (AsyncGremlinClient, async, group, chain, chord, RequestError,
     GremlinServerError, SocketError)
 
 @asyncio.coroutine
@@ -31,7 +31,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
         loop.run_until_complete(conn_coro())
 
     def test_task(self):
-        t = task(self.gc.submit("x + x", bindings={"x": 2},
+        t = async(self.gc.submit("x + x", bindings={"x": 2},
             consumer=lambda x : x[0] ** 2), loop=self.gc._loop)
         t.execute()
         message = self.gc.read()

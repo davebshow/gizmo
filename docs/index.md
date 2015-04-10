@@ -1,6 +1,6 @@
-# gizmo 0.1.8
+# gizmo 0.1.9
 
-**API BREAKING CHANGES HAVE OCCURRED BETWEEN 0.1.7 AND 0.1.8 - Full API documented below.**
+**API BREAKING CHANGES HAVE OCCURRED BETWEEN 0.1.7 AND 0.1.9 - Full API documented below.**
 
 `gizmo` is a **Python 3** driver for the the [TP3 Gremlin Server](http://www.tinkerpop.com/docs/3.0.0.M7/#gremlin-server). This module is built on [asyncio](https://docs.python.org/3/library/asyncio.html) and [websockets](http://aaugustin.github.io/websockets/). `gizmo` is currently in **alpha** mode, but all major functionality has test coverage.
 
@@ -105,25 +105,24 @@ This is great if you are already using `asyncio`, or another compatible framewor
 
 ## Task API
 
-The Task API provides a simple set of wrappers that allow you to easily manage the flow of the asynchronous websocket communication. It is loosely based on Python [Celery's Canvas](http://celery.readthedocs.org/en/latest/userguide/canvas.html), albeit much simpler. *Note* - a `gizmo.Task` mustn't be confused with an `asyncio.Task`.
+The Task API provides a simple set of wrappers that allow you to easily manage the flow of the asynchronous websocket communication. It is loosely based on Python [Celery's Canvas](http://celery.readthedocs.org/en/latest/userguide/canvas.html), albeit much simpler. *Note* - a `gizmo.Task` mustn't be confused with an `asyncio.Task`. Also similar to `asyncio`, `gizmo` provides a constructor function `async` that returns a `gizmo.Task`.
 
 To get started, you can simply schedule a task by wrapping a coroutine. Then the task provide a method `execute` that runs the `asyncio` event loop:
 
 ```python
-# Here we will use the task constructor function to create a ``gizmo.Task`` inst.
->>> from gizmo import task
+# Here we will use the async constructor function to create a ``gizmo.Task`` inst.
+>>> from gizmo import async
 >>> coro = gc.submit("x + x", bindings={"x": 2}, consumer=consumer)
-# Carefule not to overwrite the task constructor by naming your task "task".
->>> t = task(coro)
->>> t.execute()
+>>> task = async(coro)
+>>> task.execute()
 16
 ```
 
 Creating a task by wrapping the submit method is so common, there is a shortcut: `AsyncGremlinClient.s`:
 
 ```python
-# In practice, you will rarely use task explicitly. AsyncGremlinClient.s is the
-# preferred way to create tasks.
+# In practice, you will rarely use gizmo.Task explicitly. AsyncGremlinClient.s and
+# gizmo.async are the preferred way to create tasks.
 >>> task = gc.s("x + x", bindings={"x": 2}, consumer=consumer)
 >>> task.execute()
 16

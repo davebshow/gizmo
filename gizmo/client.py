@@ -14,7 +14,7 @@ from .handlers import status_error_handler, socket_error_handler
 from .response import GremlinResponse
 
 
-def task(coro, **kwargs):
+def async(coro, **kwargs):
     return Task(coro, **kwargs)
 
 
@@ -77,7 +77,7 @@ class Chord(Chain):
 
     def __init__(self, itrbl, callback, **kwargs):
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        tasks = task(asyncio.wait([t.coro for t in itrbl], loop=self.loop))
+        tasks = async(asyncio.wait([t.coro for t in itrbl], loop=self.loop))
         task_queue = asyncio.Queue()
         task_queue.put_nowait(tasks)
         task_queue.put_nowait(callback)
@@ -211,7 +211,7 @@ class AsyncGremlinClient:
         """
         if not kwargs.get("loop", ""):
             kwargs["loop"] = self._loop
-        return task(self.submit(*args, **kwargs), loop=self._loop)
+        return async(self.submit(*args, **kwargs), loop=self._loop)
 
     @asyncio.coroutine
     def recv(self, websocket):
