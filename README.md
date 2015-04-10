@@ -29,7 +29,7 @@ Schedule and execute a task that submits a script to the Gremlin Server.
 ```
 
 
-### The Basics - AsyncGremlinClient
+## The Basics - AsyncGremlinClient
 
 The `AsyncGremlinClient` uses `asyncio` and `websockets` to communicate asynchronously with the Gremlin Server. The client uses a combination [asyncio.coroutine](https://docs.python.org/3/library/asyncio-task.html#coroutines)[asyncio.Task](https://docs.python.org/3/library/asyncio-task.html#task) run on a pluggable event loop to achieve this communication.
 
@@ -96,7 +96,7 @@ def coroutine_consumer_coro():
 
 This is great if you are using asyncio already, or another compatible framework like Tornado. **gizmo** also provides another way to interact with the server, using its Task API.
 
-### Task API
+## Task API
 
 The Task API provides a simple set of wrappers that allow you to easily manage the flow of the asynchronous websocket communication. It is loosely based on Python Celery's Canvas. *Note* - a `gizmo.Task` mustn't be confused with an `asyncio.Task`, both are used in this document.
 
@@ -119,13 +119,13 @@ Creating a task by wrapping the submit method is so common, there is a shortcut:
 
 In order to design workflows by combining asynchronous tasks, **gizmo** provides a series of classes that wrap a `gizmo.Task`: `gizmo.group`, `gizmo.chain`, `gizmo.chord`. These classes are quite similar to their Celery counterparts.
 
-#### group
+### group
 
-#### chain
+### chain
 
-#### chord
+### chord
 
-#### A more complex example.
+### A more complex example:
 
 ```python
 def simple_graph():
