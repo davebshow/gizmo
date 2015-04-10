@@ -52,23 +52,19 @@
                 <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
     <ul class="nav bs-sidenav">
     
-        <li class="main active"><a href="#gizmo-017">gizmo 0.1.7</a></li>
+        <li class="main active"><a href="#gizmo-018">gizmo 0.1.8</a></li>
         
             <li><a href="#getting-started">Getting started</a></li>
         
-            <li><a href="#asyncgremlinclient">AsyncGremlinClient</a></li>
-        
             <li><a href="#tornado-interoperability-example">Tornado Interoperability Example</a></li>
-        
-            <li><a href="#gremlinclient">GremlinClient</a></li>
         
     
     </ul>
 </div></div>
                 <div class="col-md-9" role="main">
 
-<h1 id="gizmo-017">gizmo 0.1.7</h1>
-<p><strong>API BREAKING CHANGES HAVE OCCURRED BETWEEN 0.1.4 AND 0.1.5 - AsyncGremlinClient.send_receive is now AsyncGremlinClient.submit</strong></p>
+<h1 id="gizmo-018">gizmo 0.1.8</h1>
+<p>**API BREAKING CHANGES HAVE OCCURRED BETWEEN 0.1.7 AND 0.1.8 - See below</p>
 <p><strong>gizmo</strong> is a <strong>Python 3</strong> driver for the the <a href="http://www.tinkerpop.com/docs/3.0.0.M7/#gremlin-server">TP3 Gremlin Server</a>. This module is built on <a href="https://docs.python.org/3/library/asyncio.html">asyncio</a> and <a href="http://aaugustin.github.io/websockets/">websockets</a>. <strong>gizmo</strong> is currently in <strong>alpha</strong> mode, but all major functionality has test coverage.</p>
 <h2 id="getting-started">Getting started</h2>
 <p>Since Python 3.4 is not the default version on many systems, it's nice to create a virtualenv that uses Python 3.4 by default. Then use pip to install <strong>gizmo</strong>. Using virtualenvwrapper on Ubuntu 14.04:</p>
@@ -80,38 +76,38 @@ $ pip install gizmo
 <pre><code class="bash">$ ./bin/gremlin-server.sh conf/gremlin-server-modern.yaml
 </code></pre>
 
-<h2 id="asyncgremlinclient">AsyncGremlinClient</h2>
-<p>The AsyncGremlinClient uses asyncio and websockets to communicate asynchronously with the Gremlin Server. The API is based upon the use of <a href="https://docs.python.org/3/library/asyncio-task.html#task">asyncio.Task objects</a>, which take an <a href="https://docs.python.org/3/library/asyncio-task.html#coroutines">asyncio coroutine</a> generator, wrap it in a future, and schedule its execution on the event loop. With the async client, the user must manually launch the transport layer for socket communication using one of the various methods that run the event loop. Observe:</p>
-<pre><code class="python"># Create a websocket connection.
-&gt;&gt;&gt; gc = AsyncGremlinClient('ws://localhost:8182/')
-
-# Create a task by passing a coroutine and its parameters as args and kwargs.
-# In this case, submit is a method that submits a gremlin script to the
-# server and stores the responses on the client object in a message queue.
-&gt;&gt;&gt; task = gc.task(gc.submit, &quot;g.V(x).out()&quot;, bindings={&quot;x&quot;:1})
-
-# Run the event loop until the task is complete.
-&gt;&gt;&gt; gc.run_until_complete(task)
+<p>Schedule and execute a task that submits a script to the Gremlin Server.</p>
+<pre><code class="python">&gt;&gt;&gt; from gizmo import AsyncGremlinClient
+&gt;&gt;&gt; gc = AsyncGremlinClient()
+&gt;&gt;&gt; task = gc.s(&quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=lambda x: print(x[0] ** 2))
+&gt;&gt;&gt; task.execute()
+16
 </code></pre>
 
-<h3 id="basic-api">Basic API</h3>
-<p>At its most basic, the AsyncGremlinClient allows to send and receive message through a socket. The GremlinServer sends reponses in chunks, so it is important to keep receiving messages until the AsyncGremlinClient.recv returns None. Observe:</p>
-<pre><code class="python">@asyncio.coroutine
+<h3 id="the-basics-asyncgremlinclient">The Basics - AsyncGremlinClient</h3>
+<p>The <code>AsyncGremlinClient</code> uses <code>asyncio</code> and <code>websockets</code> to communicate asynchronously with the Gremlin Server. The client uses a combination <a href="https://docs.python.org/3/library/asyncio-task.html#coroutines">asyncio.coroutine</a><a href="https://docs.python.org/3/library/asyncio-task.html#task">asyncio.Task</a> run on a pluggable event loop to achieve this communication.</p>
+<p>At its most basic, the <code>AsyncGremlinClient</code> allows to send and receive message through a socket. The GremlinServer sends responses in chunks, so it is important to keep receiving messages until the <code>AsyncGremlinClient.recv</code> returns None. Observe:</p>
+<pre><code class="python">&gt;&gt;&gt; import asyncio
+&gt;&gt;&gt; gc = AsyncGremlinClient('ws://localhost:8182/')
+
+
+@asyncio.coroutine
 def recv_coro(gc):
-    yield from gc.send(&quot;g.V().has(n, val).values(n)&quot;,
+    websocket = yield from gc.send(&quot;g.V().has(n, val).values(n)&quot;,
         bindings={&quot;n&quot;: &quot;name&quot;, &quot;val&quot;: &quot;gremlin&quot;})
     while True:
-        f = yield from gc.recv()
+        f = yield from gc.recv(websocket)
         if f is None:
             break
         self.assertEqual(f[0], &quot;gremlin&quot;)
 
 
-&gt;&gt;&gt; gc.run_until_complete(recv_coro(gc))
+&gt;&gt;&gt; asyncio.get_event_loop()
+&gt;&gt;&gt; loop.run_until_complete(recv_coro(gc))
 </code></pre>
 
 <h3 id="message-queue-api">Message queue API</h3>
-<p>Sometimes you'll want to store the server results for later usage. To do so, AsyncGremlinClient provides the submit method, which allows you to submit a script to the server for evaluation, and then modify the responses on the fly as they come from the server before they are stored in AsyncGremlinClient.messages, an asycio.Queue. You can read messages off the queue using the read method. Observe:</p>
+<p>Sometimes you'll want to store the server results for later usage. To do so, <code>AsyncGremlinClient</code> provides the submit method, which allows you to submit a script to the server for evaluation, and then modify the responses on the fly as they come from the server before they are stored in <code>AsyncGremlinClient.messages</code>, an <code>asycio.Queue</code>. You can read messages off the queue using the read method. Observe:</p>
 <pre><code class="python"># This is applied to each message as it is received from the server.
 consumer = lambda x: x[0] ** 2
 
@@ -125,7 +121,7 @@ def message_queue_coro(gc):
         assert(f == 16)
 
 
-&gt;&gt;&gt; gc.run_until_complete(message_queue_coro(gc))
+&gt;&gt;&gt; loop.run_until_complete(message_queue_coro(gc))
 
 # A consumer could also be a coroutine
 @asyncio.coroutine
@@ -142,47 +138,85 @@ def coroutine_consumer_coro():
         assert(f == 16)
 
 
-&gt;&gt;&gt; gc.run_until_complete(coroutine_consumer_coro(gc))
+&gt;&gt;&gt; loop.run_until_complete(coroutine_consumer_coro(gc))
 </code></pre>
 
-<h3 id="parallel-task-execution">Parallel task execution</h3>
-<p>It's easy to run a bunch of tasks in "parallel", just add them to the client and run them. Warning: the following is an asynchronous technique and does not guarantee the order in which tasks will be completed. Observe:</p>
-<pre><code class="python"># Our &quot;slow&quot; function. This will always take longer than other tasks.
-@asyncio.coroutine
-def sleepy(gc):
-    yield from asyncio.sleep(0.25)
-    yield from gc.task(gc.submit, &quot;g.V().has(n, val).values(n)&quot;,
-        bindings={&quot;n&quot;: &quot;name&quot;, &quot;val&quot;: &quot;gremlin&quot;})
+<p>This is great if you are using asyncio already, or another compatible framework like Tornado. <strong>gizmo</strong> also provides another way to interact with the server, using its Task API.</p>
+<h3 id="task-api">Task API</h3>
+<p>The Task API provides a simple set of wrappers that allow you to easily manage the flow of the asynchronous websocket communication. It is loosely based on Python Celery's Canvas. <em>Note</em> - a <code>gizmo.Task</code> mustn't be confused with an <code>asyncio.Task</code>, both are used in this document.</p>
+<p>To get started, you can simply schedule a task by wrapping a coroutine. Then the task provide a method <code>execute</code> that runs the <code>asyncio</code> event loop.</p>
+<pre><code class="python">&gt;&gt;&gt; coro = gc.submit(&quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=consumer)
+&gt;&gt;&gt; task = task(coro)
+&gt;&gt;&gt; task.execute()
+16
+</code></pre>
 
+<p>Creating a task by wrapping the submit method is so common, there is a shortcut: <code>AsyncGremlinClient.s</code></p>
+<pre><code class="python">&gt;&gt;&gt; task = gc.s(&quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=consumer)
+&gt;&gt;&gt; task.execute()
+16
+</code></pre>
 
-# Submit the slow task first.
-&gt;&gt;&gt; gc.add_task(sleepy, gc)
+<p>In order to design workflows by combining asynchronous tasks, <strong>gizmo</strong> provides a series of classes that wrap a <code>gizmo.Task</code>: <code>gizmo.group</code>, <code>gizmo.chain</code>, <code>gizmo.chord</code>. These classes are quite similar to their Celery counterparts.</p>
+<h4 id="group">group</h4>
+<h4 id="chain">chain</h4>
+<h4 id="chord">chord</h4>
+<h4 id="a-more-complex-example">A more complex example.</h4>
+<pre><code class="python">def simple_graph():
+    gc = AsyncGremlinClient()
+    t = gc.s(&quot;g.V().remove(); g.E().remove();&quot;, collect=False)
+    t1 = gc.s(&quot;g.addVertex('uniqueId', x)&quot;, bindings={&quot;x&quot;: &quot;joe&quot;},
+        collect=False)
+    t2 = gc.s(&quot;g.addVertex('uniqueId', x)&quot;, bindings={&quot;x&quot;: &quot;maria&quot;},
+        collect=False)
+    t3 = gc.s(&quot;g.addVertex('uniqueId', x)&quot;, bindings={&quot;x&quot;: &quot;jill&quot;},
+        collect=False)
+    t4 = gc.s(&quot;g.addVertex('uniqueId', x)&quot;, bindings={&quot;x&quot;: &quot;jack&quot;},
+        collect=False)
+    g1 = group(t1, t2, t3, t4)
+    t5 = gc.s(&quot;&quot;&quot;
+        joe = g.V().has('uniqueId', 'joe').next();
+        itziri = g.V().has('uniqueId', 'itziri').next();
+        joe.addEdge('marriedTo', itziri);&quot;&quot;&quot;)
+    t6 = gc.s(&quot;&quot;&quot;
+        jill = g.V().has('uniqueId', 'jill').next();
+        jack = g.V().has('uniqueId', 'jack').next();
+        jill.addEdge('marriedTo', jack);&quot;&quot;&quot;)
+    t7 = gc.s(&quot;&quot;&quot;
+        jill = g.V().has('uniqueId', 'jill').next();
+        joe = g.V().has('uniqueId', 'joe').next();
+        jill.addEdge('hasSibling', dave);&quot;&quot;&quot;)
+    g2 = group(t5, t6, t7)
+    t8 = gc.s(&quot;g.V();&quot;, consumer=lambda x: print(x))
+    t9 = gc.s(&quot;g.E();&quot;, consumer=lambda x: print(x))
+    t10 = gc.s(&quot;g.V().count();&quot;, consumer=lambda x: assert(x[0] == 4))
+    t11 = gc.s(&quot;g.E().count();&quot;, consumer=lambda x: assert(x[0] == 3))
+    c = chain(t, g1, g2, t8, t9, t10, t11, t)
+    c.execute()
 
-# Now the fast task.
-&gt;&gt;&gt; gc.add_task(gc.submit, &quot;g.V().values(n)&quot;, bindings={&quot;n&quot;: &quot;name&quot;},
-        consumer=lambda x: x)
+&gt;&gt;&gt; simple_graph()
+[{'type': 'vertex', 'id': 17, 'label': 'vertex', 'uniqueId': ['maria']}, {'type': 'vertex', 'id': 11, 'label': 'vertex', 'uniqueId': ['jack']}, {'type': 'vertex', 'id': 13, 'label': 'vertex', 'uniqueId': ['joe']}, {'type': 'vertex', 'id': 15, 'label': 'vertex', 'uniqueId': ['jill']}]
+[{'outVLabel': 'vertex', 'label': 'hasSibling', 'inV': 13, 'type': 'edge', 'id': 19, 'outV': 15, 'inVLabel': 'vertex'}, {'outVLabel': 'vertex', 'label': 'marriedTo', 'inV': 11, 'type': 'edge', 'id': 20, 'outV': 15, 'inVLabel': 'vertex'}, {'outVLabel': 'vertex', 'label': 'marriedTo', 'inV': 17, 'type': 'edge', 'id': 21, 'outV': 13, 'inVLabel': 'vertex'}]
+[[{'outVLabel': 'vertex', 'label': 'hasSibling', 'inV': 13, 'type': 'edge', 'id': 19, 'outV': 15, 'inVLabel': 'vertex'}], [{'outVLabel': 'vertex', 'label': 'marriedTo', 'inV': 11, 'type': 'edge', 'id': 20, 'outV': 15, 'inVLabel': 'vertex'}], [{'outVLabel': 'vertex', 'label': 'marriedTo', 'inV': 17, 'type': 'edge', 'id': 21, 'outV': 13, 'inVLabel': 'vertex'}]]
 
-# This runs all the declared tasks.
-&gt;&gt;&gt; gc.run_tasks()
-
-# The task results will be stored on the message queue.
-# You can retrieve them using the asyncio.Queue API, or you can just iterate.
-&gt;&gt;&gt; for x in gc:
-...     print(x)
-# ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
-# ['gremlin']
 </code></pre>
 
 <h3 id="gremlinresponse">GremlinResponse</h3>
 <p><strong>gizmo</strong> just barely parses the Gremlin Server response message by wrapping it in a GremlinResponse object. This object inherits from list, and the content of the response is available using all normal list methods, iteration etc. The GremlinResponse also includes the metadata contained in the server response as properties.</p>
 <h3 id="asyncio-with-gizmo">asyncio with gizmo</h3>
-<p>As the above examples demonstrate, AsyncGremlinClient is made to be interoperable with asyncio. Here is an example that uses asyncio to create synchronous communication with the Gremlin Server.</p>
+<p>As the above examples demonstrate, AsyncGremlinClient is made to be interoperable with <code>asyncio</code>. Here is an example that uses <code>asyncio</code> to create synchronous communication with the Gremlin Server.</p>
 <pre><code class="python">
+@asyncio.coroutine
+def sleepy(gc):
+    yield from asyncio.sleep(0.25)
+    yield from gc.submit()&quot;g.V().has(n, val).values(n)&quot;,
+        bindings={&quot;n&quot;: &quot;name&quot;, &quot;val&quot;: &quot;gremlin&quot;})
+
 # Define a coroutine that sequentially executes instructions.
 @asyncio.coroutine
 def client(gc):
     yield from sleepy(gc)
-    yield from gc.task(gc.submit, &quot;g.V().values(n)&quot;,
+    yield from gc.submit(&quot;g.V().values(n)&quot;,
         bindings={&quot;n&quot;: &quot;name&quot;})
     # Response messages sent by server are stored in an asyncio.Queue
     while True:
@@ -193,170 +227,9 @@ def client(gc):
 
 
 &gt;&gt;&gt; gc = AsyncGremlinClient('ws://localhost:8182/')
-&gt;&gt;&gt; gc.run_until_complete(client(gc))
+&gt;&gt;&gt; loop.run_until_complete(client(gc))
 # ['gremlin']
 # ['marko', 'vadas', 'lop', 'josh', 'ripple', 'peter']
-</code></pre>
-
-<h3 id="asyncgremlinclienttask_queue">AsyncGremlinClient.task_queue</h3>
-<p>You can use the AsyncGremlinClient task queue to enqueue and dequeue tasks. Tasks are executed as they are dequeued.</p>
-<p>Let's set up the example graph used in the TP3 docs.</p>
-<p>Fire up the Gremlin-Server.</p>
-<pre><code class="bash">$ ./bin/gremlin-server.sh conf/gremlin-server.yaml
-</code></pre>
-
-<pre><code class="python">@asyncio.coroutine
-def graph_create_coro(gc):
-    # Open a TinkerGraph.
-    yield from gc.task(gc.submit, &quot;g = TinkerGraph.open()&quot;,
-        consumer=lambda x: x)
-    f = yield from gc.messages.get()
-    assert(f.status_code == 200)
-
-    # Clear the graph.
-    yield from gc.task(gc.submit, &quot;g.V().remove(); g.E().remove();&quot;,
-        collect=False)
-
-    # Add nodes, edge, add/remove properties.
-    yield from gc.task(gc.submit,
-        (&quot;gremlin = g.addVertex(label,'software','name','gremlin');&quot; +
-         &quot;gremlin.property('created', 2009);&quot; +
-         &quot;blueprints = g.addVertex(label,'software','name','blueprints');&quot; +
-         &quot;gremlin.addEdge('dependsOn',blueprints);&quot; +
-         &quot;blueprints.property('created',2010);&quot; +
-         &quot;blueprints.property('created').remove()&quot;), collect=False)
-
-    # Confirm node creation.
-    yield from gc.task(gc.submit, &quot;g.V().count()&quot;, consumer=lambda x: x)
-    f = yield from gc.messages.get()
-    assert(f[0] == 2)
-
-    # Confirm edge creation.
-    yield from gc.task(gc.submit, &quot;g.E().count()&quot;, consumer=lambda x: x)
-    f = yield from gc.messages.get()
-    assert(f[0] == 1)
-
-&gt;&gt;&gt; gc = AsyncGremlinClient(&quot;ws://localhost:8182/&quot;)
-&gt;&gt;&gt; gc.run_until_complete(graph_create_coro(gc))
-</code></pre>
-
-<p>Ok, now use the task queue to interact with the graph.</p>
-<pre><code class="python"># Enqueue two tasks, the first sleepy, the second fast. Then dequeue and
-# execute them one by one
-@asyncio.coroutine
-def enqueue_dequeue_coro(gc):
-    # Enqueues.
-    yield from gc.enqueue_task(sleepy)
-    yield from gc.enqueue_task(gc.submit, &quot;g.V().has(n, val).values(n)&quot;,
-        bindings={&quot;n&quot;: &quot;name&quot;, &quot;val&quot;: &quot;blueprints&quot;},
-        consumer=lambda x: x[0])
-
-    # Dequeues.
-    yield from gc.dequeue_task()
-    yield from gc.dequeue_task()
-
-    # Test that first in first out was maintained.
-    mssg1 = yield from gc.messages.get()
-    assert(mssg1 == &quot;gremlin&quot;)
-    print(&quot;Successfully dequeued slow operation: gremlin&quot;)
-    mssg2 = yield from gc.messages.get()
-    assert(mssg2 == &quot;blueprints&quot;)
-    print(&quot;Successfully dequeued fast operation: blueprints&quot;)
-
-
-&gt;&gt;&gt; gc.run_until_complete(enqueue_dequeue_coro(gc))
-</code></pre>
-
-<p>Use dequeue_all to dequeue and execute all tasks in the order in which they were enqueued.</p>
-<pre><code class="python">@asyncio.coroutine
-def client(gc):
-    yield from gc.enqueue_task(sleepy)
-    yield from gc.enqueue_task(gc.submit, &quot;g.V().values(name)&quot;,
-        bindings={&quot;name&quot;: &quot;name&quot;})
-    yield from gc.dequeue_all()
-
-
-&gt;&gt;&gt; gc.run_until_complete(client(gc))
-</code></pre>
-
-<p>A more advanced usage of the task queue would be to use async_dequeue_all, which requires you to define a coroutine that takes the task_queue as a param and uses the asyncio.Queue.get method to retrieve a coroutine and its args and kwargs. Behind the scenes, this creates a coroutine for each item in the queue, and then executes them on the queue asynchronously. Observe:</p>
-<pre><code class="python"># Get a coro from the queue and create a task.
-@asyncio.coroutine
-def async_dequeue_consumer(q):
-    coro, args, kwargs = yield from q.get()
-    task = gc.task(coro, *args, **kwargs)
-    f = yield from task
-
-
-@asyncio.coroutine
-def enqueue_all_coro(gc):
-    yield from gc.enqueue_task(sleepy,
-        consumer=lambda x: x[0])
-    yield from gc.enqueue_task(gc.submit, &quot;g.V().has(n, val).values(n)&quot;,
-        bindings={&quot;n&quot;: &quot;name&quot;, &quot;val&quot;: &quot;blueprints&quot;},
-        consumer=lambda x: x[0])
-
-
-# Add all items to the task queue.
-&gt;&gt;&gt; gc.run_until_complete(enqueue_all_coro(gc))
-# Map the consumer coroutines to the task queue.
-&gt;&gt;&gt; gc.async_dequeue_all(async_dequeue_consumer)
-
-
-# This coroutine just tests the results of the above pattern.
-@asyncio.coroutine
-def test_messages_coro():
-    mssg1 = yield from gc.messages.get()
-    mssg2 = yield from gc.messages.get()
-    assert(mssg1 == &quot;blueprints&quot;)
-    print(&quot;Async returned fast first: blueprints&quot;)
-    assert(mssg2 == &quot;gremlin&quot;)
-    print(&quot;Async returned slow second gremlin&quot;)
-
-
-&gt;&gt;&gt; gc.run_until_complete(check_messages_coro())
-</code></pre>
-
-<h3 id="and-much-more">And much more...</h3>
-<p>Now it is up to you to explore to explore Gremlin and the different ways you can use asyncio and <strong>gizmo</strong> to interact with the Gremlin Server :D!</p>
-<pre><code class="python">from functools import partial
-
-
-def on_chunk(chunk, f):
-    chunk = chunk
-    f.write(json.dumps(chunk) + '\n')
-
-
-@asyncio.coroutine
-def slowjson(gc):
-    yield from asyncio.sleep(5)
-    yield from gc.send(&quot;g.V().values(n)&quot;, bindings={&quot;n&quot;: &quot;name&quot;})
-
-
-@asyncio.coroutine
-def client():
-    gc = AsyncGremlinClient('ws://localhost:8182/')
-    with open(&quot;testfile.txt&quot;, &quot;w&quot;) as f:
-        p = partial(on_chunk, f=f)
-        yield from slowjson(gc)
-        yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
-        yield from gc.send(&quot;g.V(x).out()&quot;, bindings={&quot;x&quot;:1})
-        yield from gc.receive(consumer=p, collect=False)  # Don't collect messages.
-        if gc.messages.empty():
-            print(&quot;No messages collected.&quot;)
-
-
-&gt;&gt;&gt; asyncio.get_event_loop().run_until_complete(client())
-</code></pre>
-
-<p>Here's the output:</p>
-<pre><code class="python">&gt;&gt;&gt; f = open(&quot;testfile.txt&quot;)
-&gt;&gt;&gt; for line in f:
-...     print(line)
-[&quot;marko&quot;, &quot;vadas&quot;, &quot;lop&quot;, &quot;josh&quot;, &quot;ripple&quot;, &quot;peter&quot;]
-
-[{&quot;label&quot;: &quot;software&quot;, &quot;name&quot;: [&quot;lop&quot;], &quot;type&quot;: &quot;vertex&quot;, &quot;lang&quot;: [&quot;java&quot;], &quot;id&quot;: 3}, {&quot;label&quot;: &quot;person&quot;, &quot;name&quot;: [&quot;vadas&quot;], &quot;age&quot;: [27], &quot;type&quot;: &quot;vertex&quot;, &quot;id&quot;: 2}, {&quot;label&quot;: &quot;person&quot;, &quot;name&quot;: [&quot;josh&quot;], &quot;age&quot;: [32], &quot;type&quot;: &quot;vertex&quot;, &quot;id&quot;: 4}]
-
 </code></pre>
 
 <h2 id="tornado-interoperability-example">Tornado Interoperability Example</h2>
@@ -375,7 +248,7 @@ class GremlinHandler(RequestHandler):
     def get(self):
         gc = AsyncGremlinClient(uri='ws://localhost:8182/')
         # Could define custom receive here, but for brevity...
-        yield from gc.task(gc.submit, &quot;g.V().values(n)&quot;,
+        yield from gc.submit(&quot;g.V().values(n)&quot;,
             bindings={&quot;n&quot;: &quot;name&quot;})
         while not gc.messages.empty():
             message = yield from gc.messages.get()
@@ -402,22 +275,6 @@ if __name__ == '__main__':
     main()
 </code></pre>
 
-<h2 id="gremlinclient">GremlinClient</h2>
-<p>GremlinClient.execute returns self, which provides an iterator over the messages received through the websocket.</p>
-<pre><code class="python">&gt;&gt;&gt; from gizmo import GremlinClient
-&gt;&gt;&gt; gc = GremlinClient('ws://localhost:8182/')
-&gt;&gt;&gt; gc.execute(&quot;g.V(x).out()&quot;, bindings={&quot;x&quot;:1}, consumer=lambda x: print(x))
-
-&gt;&gt;&gt; for x in gc.execute(&quot;g.V(x).out()&quot;, bindings={&quot;x&quot;:1}):
-...     if x:
-...         print(x)
-</code></pre>
-
-<p><strong>TODO:</strong></p>
-<ul>
-<li>SSL Server Tests</li>
-<li>Error handling</li>
-</ul>
 </div>
             
         </div>
