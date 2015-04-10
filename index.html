@@ -149,7 +149,8 @@ def coroutine_consumer_coro():
 <h2 id="task-api">Task API</h2>
 <p>The Task API provides a simple set of wrappers that allow you to easily manage the flow of the asynchronous websocket communication. It is loosely based on Python Celery's Canvas. <em>Note</em> - a <code>gizmo.Task</code> mustn't be confused with an <code>asyncio.Task</code>, both are used in this document.</p>
 <p>To get started, you can simply schedule a task by wrapping a coroutine. Then the task provide a method <code>execute</code> that runs the <code>asyncio</code> event loop.</p>
-<pre><code class="python">&gt;&gt;&gt; coro = gc.submit(&quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=consumer)
+<pre><code class="python">&gt;&gt;&gt; from gizmo import task
+&gt;&gt;&gt; coro = gc.submit(&quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=consumer)
 &gt;&gt;&gt; task = task(coro)
 &gt;&gt;&gt; task.execute()
 16
@@ -166,7 +167,10 @@ def coroutine_consumer_coro():
 <h3 id="chain">chain</h3>
 <h3 id="chord">chord</h3>
 <h3 id="a-more-complex-example">A more complex example:</h3>
-<pre><code class="python">def simple_graph():
+<pre><code class="python">&gt;&gt;&gt; from gizmo import group, chain
+
+
+def simple_graph():
     gc = AsyncGremlinClient()
     t = gc.s(&quot;g.V().remove(); g.E().remove();&quot;, collect=False)
     t1 = gc.s(&quot;g.addVertex('uniqueId', x)&quot;, bindings={&quot;x&quot;: &quot;joe&quot;},
@@ -197,6 +201,7 @@ def coroutine_consumer_coro():
     t11 = gc.s(&quot;g.E().count();&quot;, consumer=lambda x: assert(x[0] == 3))
     c = chain(t, g1, g2, t8, t9, t10, t11, t)
     c.execute()
+
 
 &gt;&gt;&gt; simple_graph()
 [{'type': 'vertex', 'id': 17, 'label': 'vertex', 'uniqueId': ['maria']}, {'type': 'vertex', 'id': 11, 'label': 'vertex', 'uniqueId': ['jack']}, {'type': 'vertex', 'id': 13, 'label': 'vertex', 'uniqueId': ['joe']}, {'type': 'vertex', 'id': 15, 'label': 'vertex', 'uniqueId': ['jill']}]
