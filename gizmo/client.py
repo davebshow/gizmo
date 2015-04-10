@@ -81,7 +81,7 @@ class Chord(Chain):
         task_queue = asyncio.Queue()
         task_queue.put_nowait(tasks)
         task_queue.put_nowait(callback)
-        self.task = self.dequeue(task_queue)
+        self.coro = self.dequeue(task_queue)
 
 
 class AsyncGremlinClient:
