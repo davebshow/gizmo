@@ -107,17 +107,7 @@ class AsyncGremlinClient:
             # Passed through to websockets.connect
             kwargs['ssl'] = ssl_context
         self._loop = loop or asyncio.get_event_loop()
-        self._sock = None
         self._messages = asyncio.Queue()
-
-    def get_sock(self):
-        """
-        Read only access to the websocket connection.
-
-        :returns: websockets.WebSocketClientProtocol
-        """
-        return self._sock
-    sock = property(get_sock)
 
     def get_messages(self):
         """

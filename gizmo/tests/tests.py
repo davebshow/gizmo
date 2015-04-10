@@ -167,33 +167,33 @@ class AsyncGremlinClientTests(unittest.TestCase):
 
     def test_z_e2e(self):
         t = self.gc.s("g.V().remove(); g.E().remove();", collect=False)
-        t1 = self.gc.s("g.addVertex('uniqueId', x)", bindings={"x": "dave"},
+        t1 = self.gc.s("g.addVertex('uniqueId', x)", bindings={"x": "joe"},
             collect=False)
-        t2 = self.gc.s("g.addVertex('uniqueId', x)", bindings={"x": "itziri"},
+        t2 = self.gc.s("g.addVertex('uniqueId', x)", bindings={"x": "maria"},
             collect=False)
-        t3 = self.gc.s("g.addVertex('uniqueId', x)", bindings={"x": "beth"},
+        t3 = self.gc.s("g.addVertex('uniqueId', x)", bindings={"x": "jill"},
             collect=False)
-        t4 = self.gc.s("g.addVertex('uniqueId', x)", bindings={"x": "kris"},
+        t4 = self.gc.s("g.addVertex('uniqueId', x)", bindings={"x": "jack"},
             collect=False)
         g1 = group(t1, t2, t3, t4)
         t5 = self.gc.s("""
-            dave = g.V().has('uniqueId', 'dave').next();
-            itziri = g.V().has('uniqueId', 'itziri').next();
-            dave.addEdge('marriedTo', itziri);""")
+            joe = g.V().has('uniqueId', 'joe').next();
+            maria = g.V().has('uniqueId', 'maria').next();
+            joe.addEdge('marriedTo', maria);""")
         t6 = self.gc.s("""
-            beth = g.V().has('uniqueId', 'beth').next();
-            kris = g.V().has('uniqueId', 'kris').next();
-            beth.addEdge('marriedTo', kris);""")
+            jill = g.V().has('uniqueId', 'jill').next();
+            jack = g.V().has('uniqueId', 'jack').next();
+            jill.addEdge('marriedTo', jack);""")
         t7 = self.gc.s("""
-            beth = g.V().has('uniqueId', 'beth').next();
-            dave = g.V().has('uniqueId', 'dave').next();
-            beth.addEdge('hasSibling', dave);""")
+            jill = g.V().has('uniqueId', 'jill').next();
+            joe = g.V().has('uniqueId', 'joe').next();
+            jill.addEdge('hasSibling', joe);""")
         g2 = group(t5, t6, t7)
         t8 = self.gc.s("g.V();", consumer=lambda x: print(x))
         t9 = self.gc.s("g.E();", consumer=lambda x: print(x))
         t10 = self.gc.s("g.V().count();", consumer=lambda x: self.assertEqual(x[0], 4))
         t11 = self.gc.s("g.E().count();", consumer=lambda x: self.assertEqual(x[0], 3))
-        c = chain(t, g1, g2, t8, t9, t10, t11)
+        c = chain(t, g1, g2, t8, t9, t10, t11, t)
         c.execute()
         results = []
         while not self.gc.messages.empty():
