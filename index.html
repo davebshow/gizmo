@@ -56,6 +56,10 @@
         
             <li><a href="#getting-started">Getting started</a></li>
         
+            <li><a href="#the-basics-asyncgremlinclient">The Basics - AsyncGremlinClient</a></li>
+        
+            <li><a href="#task-api">Task API</a></li>
+        
             <li><a href="#tornado-interoperability-example">Tornado Interoperability Example</a></li>
         
     
@@ -84,7 +88,7 @@ $ pip install gizmo
 16
 </code></pre>
 
-<h3 id="the-basics-asyncgremlinclient">The Basics - AsyncGremlinClient</h3>
+<h2 id="the-basics-asyncgremlinclient">The Basics - AsyncGremlinClient</h2>
 <p>The <code>AsyncGremlinClient</code> uses <code>asyncio</code> and <code>websockets</code> to communicate asynchronously with the Gremlin Server. The client uses a combination <a href="https://docs.python.org/3/library/asyncio-task.html#coroutines">asyncio.coroutine</a><a href="https://docs.python.org/3/library/asyncio-task.html#task">asyncio.Task</a> run on a pluggable event loop to achieve this communication.</p>
 <p>At its most basic, the <code>AsyncGremlinClient</code> allows to send and receive message through a socket. The GremlinServer sends responses in chunks, so it is important to keep receiving messages until the <code>AsyncGremlinClient.recv</code> returns None. Observe:</p>
 <pre><code class="python">&gt;&gt;&gt; import asyncio
@@ -142,7 +146,7 @@ def coroutine_consumer_coro():
 </code></pre>
 
 <p>This is great if you are using asyncio already, or another compatible framework like Tornado. <strong>gizmo</strong> also provides another way to interact with the server, using its Task API.</p>
-<h3 id="task-api">Task API</h3>
+<h2 id="task-api">Task API</h2>
 <p>The Task API provides a simple set of wrappers that allow you to easily manage the flow of the asynchronous websocket communication. It is loosely based on Python Celery's Canvas. <em>Note</em> - a <code>gizmo.Task</code> mustn't be confused with an <code>asyncio.Task</code>, both are used in this document.</p>
 <p>To get started, you can simply schedule a task by wrapping a coroutine. Then the task provide a method <code>execute</code> that runs the <code>asyncio</code> event loop.</p>
 <pre><code class="python">&gt;&gt;&gt; coro = gc.submit(&quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=consumer)
@@ -158,10 +162,10 @@ def coroutine_consumer_coro():
 </code></pre>
 
 <p>In order to design workflows by combining asynchronous tasks, <strong>gizmo</strong> provides a series of classes that wrap a <code>gizmo.Task</code>: <code>gizmo.group</code>, <code>gizmo.chain</code>, <code>gizmo.chord</code>. These classes are quite similar to their Celery counterparts.</p>
-<h4 id="group">group</h4>
-<h4 id="chain">chain</h4>
-<h4 id="chord">chord</h4>
-<h4 id="a-more-complex-example">A more complex example.</h4>
+<h3 id="group">group</h3>
+<h3 id="chain">chain</h3>
+<h3 id="chord">chord</h3>
+<h3 id="a-more-complex-example">A more complex example:</h3>
 <pre><code class="python">def simple_graph():
     gc = AsyncGremlinClient()
     t = gc.s(&quot;g.V().remove(); g.E().remove();&quot;, collect=False)
