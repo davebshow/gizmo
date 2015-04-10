@@ -9,13 +9,13 @@ import json
 import ssl
 import uuid
 import websockets
-from .exceptions import SocketError
+from .exceptions import SocketError, GremlinServerError
 from .handlers import status_error_handler, socket_error_handler
 from .response import GremlinResponse
 
 
-def async(coro, **kwargs):
-    return Task(coro, **kwargs)
+def async(coro, *args, **kwargs):
+    return Task(coro, *args, **kwargs)
 
 
 def group(*args, **kwargs):
@@ -32,9 +32,11 @@ def chord(itrbl, callback, **kwargs):
 
 class Task:
 
-    def __init__(self, coro, **kwargs):
+    def __init__(self, coro, *args, **kwargs):
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        self.coro = coro
+        self.client = coro.__self__
+        task = coro(*args, **kwargs)
+        self.coro = self.error_handler(task)
 
     def __call__(self):
         self.task = asyncio.async(self.coro, loop=self.loop)
@@ -45,6 +47,12 @@ class Task:
             self()
         self.loop.run_until_complete(self.task)
 
+    def error_handler(self, task):
+        try:
+            yield from task
+        except Exception as e:
+            raise e
+
 
 class Group(Task):
 
@@ -52,10 +60,21 @@ class Group(Task):
         if len(args) == 1:
             args = args[0]
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        self.coro = asyncio.wait([t.coro for t in args], loop=self.loop)
+        tasks = asyncio.wait([t.coro for t in args], loop=self.loop,
+            return_when=asyncio.FIRST_EXCEPTION)
+        self.coro = self.wait_error_handler(tasks)
+
+    @asyncio.coroutine
+    def wait_error_handler(self, tasks):
+        done, pending = yield from tasks
+        try:
+            f, = done
+            f.result()
+        except ValueError:
+            pass
 
 
-class Chain(Task):
+class Chain(Group):
 
     def __init__(self, *args, **kwargs):
         if len(args) == 1:
@@ -64,24 +83,30 @@ class Chain(Task):
         task_queue = asyncio.Queue()
         for t in args:
             task_queue.put_nowait(t)
-        self.coro = self.dequeue(task_queue)
+        task = asyncio.async(self.dequeue(task_queue), loop=self.loop)
+        self.coro = self.error_handler(task)
 
     @asyncio.coroutine
     def dequeue(self, queue):
         while not queue.empty():
             t = queue.get_nowait()
-            yield from t()
+            if asyncio.iscoroutine(t):
+                yield from self.wait_error_handler(t)
+            else:
+                yield from t()
 
 
 class Chord(Chain):
 
     def __init__(self, itrbl, callback, **kwargs):
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        tasks = async(asyncio.wait([t.coro for t in itrbl], loop=self.loop))
+        tasks = asyncio.wait([t.coro for t in itrbl], loop=self.loop,
+            return_when=asyncio.FIRST_EXCEPTION)
         task_queue = asyncio.Queue()
         task_queue.put_nowait(tasks)
         task_queue.put_nowait(callback)
-        self.coro = self.dequeue(task_queue)
+        task = asyncio.async(self.dequeue(task_queue), loop=self.loop)
+        self.coro = self.error_handler(task)
 
 
 class AsyncGremlinClient:
@@ -108,6 +133,7 @@ class AsyncGremlinClient:
             kwargs['ssl'] = ssl_context
         self._loop = loop or asyncio.get_event_loop()
         self._messages = asyncio.Queue()
+        # self.error = asyncio.Future()
 
     def get_messages(self):
         """
@@ -202,7 +228,7 @@ class AsyncGremlinClient:
         :returns: None.
         """
         websocket = yield from self.send(gremlin, bindings=bindings, lang=lang,
-            op=op, processor=processor)
+                op=op, processor=processor)
         yield from self.run(websocket, consumer=consumer, collect=collect)
 
     def s(self, *args, **kwargs):
@@ -211,7 +237,7 @@ class AsyncGremlinClient:
         """
         if not kwargs.get("loop", ""):
             kwargs["loop"] = self._loop
-        return async(self.submit(*args, **kwargs), loop=self._loop)
+        return async(self.submit, *args, **kwargs)
 
     @asyncio.coroutine
     def recv(self, websocket):

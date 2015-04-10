@@ -31,11 +31,21 @@ class AsyncGremlinClientTests(unittest.TestCase):
         loop.run_until_complete(conn_coro())
 
     def test_task(self):
-        t = async(self.gc.submit("x + x", bindings={"x": 2},
-            consumer=lambda x : x[0] ** 2), loop=self.gc._loop)
+        t = async(self.gc.submit, "x + x", bindings={"x": 2},
+            consumer=lambda x : x[0] ** 2, loop=self.gc._loop)
         t.execute()
         message = self.gc.read()
         self.assertEqual(16, message)
+
+    def test_task_error(self):
+        t = async(self.gc.submit, "x + x g.adasdfd", bindings={"x": 2},
+            consumer=lambda x : x[0] ** 2, loop=self.gc._loop)
+        try:
+            t.execute()
+            error = False
+        except:
+            error = True
+        self.assertTrue(error)
 
     def test_submittask(self):
         t = self.gc.s("x + x", bindings={"x": 2},
@@ -57,6 +67,19 @@ class AsyncGremlinClientTests(unittest.TestCase):
             results.append(self.gc.read())
         self.assertEqual(results[0], 16)
         self.assertEqual(results[1], 1)
+
+    def test_group_error(self):
+        t = self.gc.s("x + x g.sdfa", bindings={"x": 2},
+            consumer=lambda x : x[0] ** 2)
+        slow = self.gc.s("x + x", bindings={"x": 2},
+            consumer=consumer_coro1)
+        g = group(slow, t)
+        try:
+            g.execute()
+            error = False
+        except:
+            error = True
+        self.assertTrue(error)
 
     #This operation is problematic
     def test_group_of_groups(self):
@@ -102,6 +125,18 @@ class AsyncGremlinClientTests(unittest.TestCase):
         self.assertEqual(results[0], 1)
         self.assertEqual(results[1], 16)
 
+    def test_chain_error(self):
+        t = self.gc.s("x + x g.sadf", bindings={"x": 2},
+            consumer=lambda x : x[0] ** 2)
+        slow = self.gc.s("x + x", bindings={"x": 2},
+            consumer=consumer_coro1)
+        try:
+            chain(slow, t).execute()
+            error = False
+        except:
+            error = True
+        self.assertTrue(error)
+
     def test_chains_in_group(self):
         slow = self.gc.s("x + x", bindings={"x": 2},
             consumer=consumer_coro2)
@@ -119,6 +154,22 @@ class AsyncGremlinClientTests(unittest.TestCase):
         self.assertTrue(results.index(4) < results.index(1))
         self.assertTrue(results.index(16) < results.index(1))
         self.assertTrue(results.index(16) < results.index(4))
+
+    def test_chains_in_group_error(self):
+        slow = self.gc.s("x + x g.edfsa", bindings={"x": 2},
+            consumer=consumer_coro2)
+        slow1 = self.gc.s("x + x", bindings={"x": 2},
+            consumer=consumer_coro1)
+        slow_chain = chain(slow, slow1)
+
+        t = self.gc.s("x + x", bindings={"x": 2},
+            consumer=lambda x : x[0] ** 2)
+        try:
+            group(slow_chain, t).execute()
+            error = False
+        except:
+            error = True
+        self.assertTrue(error)
 
     def test_chain_itrbl_arg(self):
         t = self.gc.s("x + x", bindings={"x": 2},
@@ -200,7 +251,6 @@ class AsyncGremlinClientTests(unittest.TestCase):
             results.append(self.gc.read())
         print(results)
 
-
     def test_recv(self):
         @asyncio.coroutine
         def recv_coro():
@@ -215,6 +265,22 @@ class AsyncGremlinClientTests(unittest.TestCase):
             self.assertEqual(results[0][0], 8)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(recv_coro())
+
+
+    def test_submit_error(self):
+
+        @asyncio.coroutine
+        def submit_coro():
+            yield from self.gc.submit("x + x g.asdfas", bindings={"x": 4})
+
+        loop = asyncio.get_event_loop()
+        try:
+            loop.run_until_complete(submit_coro())
+
+            error = False
+        except:
+            error = True
+        self.assertTrue(error)
 
 
 if __name__ == "__main__":
