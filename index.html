@@ -158,15 +158,13 @@ def coroutine_consumer_coro():
 <pre><code class="python"># Here we will use the task constructor function to create a ``gizmo.Task`` inst.
 &gt;&gt;&gt; from gizmo import task
 &gt;&gt;&gt; coro = gc.submit(&quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=consumer)
-# Careful not to overwrite the task constructor by naming your task &quot;task&quot;
-&gt;&gt;&gt; t = task(coro)
-&gt;&gt;&gt; t.execute()
+&gt;&gt;&gt; task = task(coro)
+&gt;&gt;&gt; task.execute()
 16
 </code></pre>
 
 <p>Creating a task by wrapping the submit method is so common, there is a shortcut: <code>AsyncGremlinClient.s</code>:</p>
-<pre><code class="python"># Usually, we won't even use the task constructor. This the main API.
-&gt;&gt;&gt; task = gc.s(&quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=consumer)
+<pre><code class="python">&gt;&gt;&gt; task = gc.s(&quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=consumer)
 &gt;&gt;&gt; task.execute()
 16
 </code></pre>
