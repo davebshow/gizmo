@@ -103,6 +103,7 @@ The Task API provides a simple set of wrappers that allow you to easily manage t
 To get started, you can simply schedule a task by wrapping a coroutine. Then the task provide a method `execute` that runs the `asyncio` event loop.
 
 ```python
+>>> from gizmo import task
 >>> coro = gc.submit("x + x", bindings={"x": 2}, consumer=consumer)
 >>> task = task(coro)
 >>> task.execute()
@@ -128,6 +129,9 @@ In order to design workflows by combining asynchronous tasks, **gizmo** provides
 ### A more complex example:
 
 ```python
+>>> from gizmo import group, chain
+
+
 def simple_graph():
     gc = AsyncGremlinClient()
     t = gc.s("g.V().remove(); g.E().remove();", collect=False)
@@ -159,6 +163,7 @@ def simple_graph():
     t11 = gc.s("g.E().count();", consumer=lambda x: assert(x[0] == 3))
     c = chain(t, g1, g2, t8, t9, t10, t11, t)
     c.execute()
+
 
 >>> simple_graph()
 [{'type': 'vertex', 'id': 17, 'label': 'vertex', 'uniqueId': ['maria']}, {'type': 'vertex', 'id': 11, 'label': 'vertex', 'uniqueId': ['jack']}, {'type': 'vertex', 'id': 13, 'label': 'vertex', 'uniqueId': ['joe']}, {'type': 'vertex', 'id': 15, 'label': 'vertex', 'uniqueId': ['jill']}]
