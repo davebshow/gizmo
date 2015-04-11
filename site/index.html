@@ -158,8 +158,7 @@ def coroutine_consumer_coro():
 <p>To get started, you can simply schedule a task by wrapping a coroutine. Then the task provide a method <code>execute</code> that runs the <code>asyncio</code> event loop:</p>
 <pre><code class="python"># Here we will use the async constructor function to create a ``gizmo.Task`` inst.
 &gt;&gt;&gt; from gizmo import async
-&gt;&gt;&gt; coro = gc.submit(&quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=consumer)
-&gt;&gt;&gt; task = async(coro)
+&gt;&gt;&gt; task = async(gc.submit, &quot;x + x&quot;, bindings={&quot;x&quot;: 2}, consumer=consumer)
 &gt;&gt;&gt; task.execute()
 16
 </code></pre>

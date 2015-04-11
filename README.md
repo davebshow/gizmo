@@ -112,8 +112,7 @@ To get started, you can simply schedule a task by wrapping a coroutine. Then the
 ```python
 # Here we will use the async constructor function to create a ``gizmo.Task`` inst.
 >>> from gizmo import async
->>> coro = gc.submit("x + x", bindings={"x": 2}, consumer=consumer)
->>> task = async(coro)
+>>> task = async(gc.submit, "x + x", bindings={"x": 2}, consumer=consumer)
 >>> task.execute()
 16
 ```
