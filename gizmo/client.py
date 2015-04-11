@@ -35,11 +35,12 @@ class Task:
     def __init__(self, coro, *args, **kwargs):
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
         self.client = coro.__self__
-        task = coro(*args, **kwargs)
-        self.coro = self.error_handler(task)
+        self.coro = coro(*args, **kwargs)
 
     def __call__(self):
-        self.task = asyncio.async(self.coro, loop=self.loop)
+        task = asyncio.async(self.coro)
+        coro = self.error_handler(task)
+        self.task = asyncio.async(coro, loop=self.loop)
         return self.task
 
     def execute(self):
@@ -60,19 +61,18 @@ class Group(Task):
         if len(args) == 1:
             args = args[0]
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        # Maybe custom call here too!
-        tasks = asyncio.wait([t.coro for t in args], loop=self.loop,
+        self.coro = asyncio.wait([t.coro for t in args], loop=self.loop,
             return_when=asyncio.FIRST_EXCEPTION)
-        self.coro = self.wait_error_handler(tasks)
+
+    def __call__(self):
+        coro = self.wait_error_handler(self.coro)
+        self.task = asyncio.async(coro, loop=self.loop)
+        return self.task
 
     @asyncio.coroutine
     def wait_error_handler(self, tasks):
         done, pending = yield from tasks
-        try:
-            f, = done
-            f.result()
-        except ValueError:
-            pass
+        errors = [f.result() for f in done]
 
 
 class Chain(Group):
@@ -84,9 +84,13 @@ class Chain(Group):
         task_queue = asyncio.Queue()
         for t in args:
             task_queue.put_nowait(t)
-        ## THis is messing up flow control - implement custom call
-        task = asyncio.async(self.dequeue(task_queue), loop=self.loop)
-        self.coro = self.error_handler(task)
+        self.coro = self.dequeue(task_queue)
+
+    def __call__(self):
+        task = asyncio.async(self.coro, loop=self.loop)
+        coro = self.error_handler(task)
+        self.task = asyncio.async(coro)
+        return self.task
 
     @asyncio.coroutine
     def dequeue(self, queue):
@@ -107,9 +111,8 @@ class Chord(Chain):
         task_queue = asyncio.Queue()
         task_queue.put_nowait(tasks)
         task_queue.put_nowait(callback)
-        ## THis is messing up flow control - implement custom call
-        task = asyncio.async(self.dequeue(task_queue), loop=self.loop)
-        self.coro = self.error_handler(task)
+        self.coro = self.dequeue(task_queue)
+
 
 class AsyncGremlinClient:
 

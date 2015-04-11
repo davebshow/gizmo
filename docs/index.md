@@ -1,4 +1,4 @@
-# gizmo 0.1.10
+# gizmo 0.1.11
 
 **API BREAKING CHANGES HAVE OCCURRED BETWEEN 0.1.7 AND 0.1.9 - Full API documented below.**
 
