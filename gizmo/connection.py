@@ -1,5 +1,6 @@
 import asyncio
 import websockets
+from .exceptions import SocketError
 from .handlers import socket_error_handler
 
 
@@ -47,12 +48,11 @@ class ConnectionManager:
         try:
             socket_error_handler(socket)
         except SocketError:
-            print("Error")
             socket = yield from self.connect()
         else:
             self.active_conns.add(socket)
-        connection = Connection(socket, self)
-        return connection
+            socket = Connection(socket, self)
+        return socket
 
     def _put(self, socket):
         try:
