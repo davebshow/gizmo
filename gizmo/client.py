@@ -9,115 +9,19 @@ import json
 import ssl
 import uuid
 import websockets
+from .connection import ConnectionManager
 from .exceptions import SocketError, GremlinServerError
 from .handlers import status_error_handler, socket_error_handler
 from .response import GremlinResponse
-
-
-def async(coro, *args, **kwargs):
-    return Task(coro, *args, **kwargs)
-
-
-def group(*args, **kwargs):
-    return Group(*args, **kwargs)
-
-
-def chain(*args, **kwargs):
-    return Chain(*args, **kwargs)
-
-
-def chord(itrbl, callback, **kwargs):
-    return Chord(itrbl, callback, **kwargs)
-
-
-class Task:
-
-    def __init__(self, coro, *args, **kwargs):
-        self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        self.client = coro.__self__
-        self.coro = coro(*args, **kwargs)
-
-    def __call__(self):
-        task = asyncio.async(self.coro)
-        coro = self.error_handler(task)
-        self.task = asyncio.async(coro, loop=self.loop)
-        return self.task
-
-    def execute(self):
-        if not hasattr(self, "task"):
-            self()
-        self.loop.run_until_complete(self.task)
-
-    def error_handler(self, task):
-        try:
-            yield from task
-        except Exception as e:
-            raise e
-
-
-class Group(Task):
-
-    def __init__(self, *args, **kwargs):
-        if len(args) == 1:
-            args = args[0]
-        self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        self.coro = asyncio.wait([t.coro for t in args], loop=self.loop,
-            return_when=asyncio.FIRST_EXCEPTION)
-
-    def __call__(self):
-        coro = self.wait_error_handler(self.coro)
-        self.task = asyncio.async(coro, loop=self.loop)
-        return self.task
-
-    @asyncio.coroutine
-    def wait_error_handler(self, tasks):
-        done, pending = yield from tasks
-        errors = [f.result() for f in done]
-
-
-class Chain(Group):
-
-    def __init__(self, *args, **kwargs):
-        if len(args) == 1:
-            args = args[0]
-        self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        task_queue = asyncio.Queue()
-        for t in args:
-            task_queue.put_nowait(t)
-        self.coro = self.dequeue(task_queue)
-
-    def __call__(self):
-        task = asyncio.async(self.coro, loop=self.loop)
-        coro = self.error_handler(task)
-        self.task = asyncio.async(coro)
-        return self.task
-
-    @asyncio.coroutine
-    def dequeue(self, queue):
-        while not queue.empty():
-            t = queue.get_nowait()
-            if asyncio.iscoroutine(t):
-                yield from self.wait_error_handler(t)
-            else:
-                yield from t()
-
-
-class Chord(Chain):
-
-    def __init__(self, itrbl, callback, **kwargs):
-        self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        tasks = asyncio.wait([t.coro for t in itrbl], loop=self.loop,
-            return_when=asyncio.FIRST_EXCEPTION)
-        task_queue = asyncio.Queue()
-        task_queue.put_nowait(tasks)
-        task_queue.put_nowait(callback)
-        self.coro = self.dequeue(task_queue)
+from .tasks import async
 
 
 class AsyncGremlinClient:
 
     def __init__(self, uri='ws://localhost:8182/', loop=None, ssl=None,
-                 protocol=None, **kwargs):
+                 protocol=None, lang="gremlin-groovy", op="eval",
+                 processor="", connection=None, max_conn=10, timeout=None,
+                 **kwargs):
         """
         Asynchronous Client for the asyncio API.
 
@@ -137,8 +41,12 @@ class AsyncGremlinClient:
             # Passed through to websockets.connect
             kwargs['ssl'] = ssl_context
         self._loop = loop or asyncio.get_event_loop()
+        self.lang = lang or "gremlin-groovy"
+        self.op = op or "eval"
+        self.processor = processor or ""
+        self.connection = connection or ConnectionManager(uri, max_conn=max_conn,
+            timeout=timeout, loop=self._loop)
         self._messages = asyncio.Queue()
-        # self.error = asyncio.Future()
 
     def get_messages(self):
         """
@@ -198,6 +106,9 @@ class AsyncGremlinClient:
         :param processor: str. OpProcessor to utilize on the Gremlin Server.
         :returns: websockets.WebSocketClientProtocol
         """
+        lang = lang or self.lang
+        op = op or self.op
+        processor = processor or self.processor
         payload = {
             "requestId": str(uuid.uuid4()),
             "op": op,
@@ -209,9 +120,13 @@ class AsyncGremlinClient:
             }
         }
         if websocket is None:
-            connector = asyncio.async(self.connect(), loop=self._loop)
-            websocket = yield from connector
-        socket_error_handler(websocket)
+            websocket = yield from self.connection.connect(self.uri)
+        else:  # Expect raw websocket.
+            try:
+                socket_error_handler(websocket)
+            except SocketError:
+                websocket = yield from asyncio.async(self.connect(),
+                    loop=self._loop)
         yield from websocket.send(json.dumps(payload))
         return websocket
 
@@ -287,6 +202,7 @@ class AsyncGremlinClient:
         if message.status_code == 200:
             self.messages.put_nowait(message)
         elif message.status_code == 299:
+            self.close_socket(websocket)
             pass
         else:
             status_error_handler(message.status_code, message.message)
@@ -300,7 +216,6 @@ class AsyncGremlinClient:
         :param consumer: func. Function to map to server messages.
         :param collect: bool. Retain server messages on client object.
         """
-        websocket = websocket
         socket_error_handler(websocket)
         while True:
             message = yield from websocket.recv()
@@ -314,6 +229,14 @@ class AsyncGremlinClient:
                 if message and collect:
                     self.messages.put_nowait(message)
             elif message.status_code == 299:
+                self.close_socket(websocket)
                 break
             else:
+                self.close_socket(websocket)
                 status_error_handler(message.status_code, message.message)
+
+    def close_socket(self, websocket):
+        try:
+            websocket.close()
+        except AttributeError:
+            pass

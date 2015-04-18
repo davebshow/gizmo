@@ -3,6 +3,7 @@ Basic test cases, will build a larger graph and make end2end tests.
 """
 
 import asyncio
+import websockets
 import unittest
 from gizmo import (AsyncGremlinClient, async, group, chain, chord, RequestError,
     GremlinServerError, SocketError)
@@ -20,7 +21,7 @@ def consumer_coro2(x):
 class AsyncGremlinClientTests(unittest.TestCase):
 
     def setUp(self):
-        self.gc = AsyncGremlinClient("ws://localhost:8182/")
+        self.gc = AsyncGremlinClient("ws://localhost:8182/", max_conn=10)
 
     def test_connection(self):
         @asyncio.coroutine
@@ -158,7 +159,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
     def test_chains_in_group_error(self):
         slow = self.gc.s("x + x g.edfsa", bindings={"x": 2},
             consumer=consumer_coro2)
-        slow1 = self.gc.s("x + x", bindings={"x": 2},
+        slow1 = self.gc.s("x + x g.eafwa", bindings={"x": 2},
             consumer=consumer_coro1)
         slow_chain = chain(slow, slow1)
 
@@ -215,6 +216,20 @@ class AsyncGremlinClientTests(unittest.TestCase):
         self.assertEqual(results[0], 1)
         self.assertEqual(results[1], 4)
         self.assertEqual(results[2], 16)
+
+    def test_chord_group_error(self):
+        slow1 = self.gc.s("x + x g.asdf", bindings={"x": 2},
+            consumer=consumer_coro1)
+        slow2 = self.gc.s("x + x", bindings={"x": 2},
+            consumer=consumer_coro2)
+        t = self.gc.s("x + x", bindings={"x": 2},
+            consumer=lambda x : x[0] ** 2)
+        try:
+            chord([slow2, slow1], t).execute()
+            error = False
+        except:
+            error = True
+        self.assertTrue(error)
 
     def test_z_e2e(self):
         t = self.gc.s("g.V().remove(); g.E().remove();", collect=False)
@@ -276,7 +291,6 @@ class AsyncGremlinClientTests(unittest.TestCase):
         loop = asyncio.get_event_loop()
         try:
             loop.run_until_complete(submit_coro())
-
             error = False
         except:
             error = True
