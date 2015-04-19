@@ -6,12 +6,14 @@ import asyncio
 import websockets
 import unittest
 from gizmo import (AsyncGremlinClient, async, group, chain, chord, RequestError,
-    GremlinServerError, SocketError)
+    GremlinServerError, SocketError, ConnectionManager)
+
 
 @asyncio.coroutine
 def consumer_coro1(x):
     yield from asyncio.sleep(0.25)
     return x[0] ** 0
+
 
 def consumer_coro2(x):
     yield from asyncio.sleep(0.50)
@@ -21,7 +23,7 @@ def consumer_coro2(x):
 class AsyncGremlinClientTests(unittest.TestCase):
 
     def setUp(self):
-        self.gc = AsyncGremlinClient("ws://localhost:8182/", max_conn=10)
+        self.gc = AsyncGremlinClient("ws://localhost:8182/")
 
     def test_connection(self):
         @asyncio.coroutine
@@ -295,6 +297,106 @@ class AsyncGremlinClientTests(unittest.TestCase):
         except:
             error = True
         self.assertTrue(error)
+
+
+class ConnectionManagerTests(unittest.TestCase):
+
+    def setUp(self):
+        self.factory = ConnectionManager(max_conn=2, timeout=1)
+        self.loop = asyncio.get_event_loop()
+
+    def test_connect(self):
+
+        @asyncio.coroutine
+        def conn():
+            conn = yield from self.factory.connect()
+            self.assertIsNotNone(conn.socket)
+            self.assertTrue(conn.socket.open)
+            conn.close()
+            self.assertEqual(self.factory.num_active_conns, 0)
+
+        self.loop.run_until_complete(conn())
+
+    def test_multi_connect(self):
+
+        @asyncio.coroutine
+        def conn():
+            conn1 = yield from self.factory.connect()
+            conn2 = yield from self.factory.connect()
+            self.assertIsNotNone(conn1.socket)
+            self.assertTrue(conn1.socket.open)
+            self.assertIsNotNone(conn2.socket)
+            self.assertTrue(conn2.socket.open)
+            conn1.close()
+            self.assertEqual(self.factory.num_active_conns, 1)
+            conn2.close()
+            self.assertEqual(self.factory.num_active_conns, 0)
+
+        self.loop.run_until_complete(conn())
+
+    def test_timeout(self):
+
+        @asyncio.coroutine
+        def conn():
+            conn1 = yield from self.factory.connect()
+            conn2 = yield from self.factory.connect()
+            try:
+                conn3 = yield from self.factory.connect()
+                timeout = False
+            except asyncio.TimeoutError:
+                timeout = True
+            self.assertTrue(timeout)
+
+        self.loop.run_until_complete(conn())
+
+    def test_socket_reuse(self):
+
+        @asyncio.coroutine
+        def conn():
+            conn1 = yield from self.factory.connect()
+            conn2 = yield from self.factory.connect()
+            try:
+                conn3 = yield from self.factory.connect()
+                timeout = False
+            except asyncio.TimeoutError:
+                timeout = True
+            self.assertTrue(timeout)
+            conn2.close()
+            conn3 = yield from self.factory.connect()
+            self.assertIsNotNone(conn1.socket)
+            self.assertTrue(conn1.socket.open)
+            self.assertIsNotNone(conn3.socket)
+            self.assertTrue(conn3.socket.open)
+            self.assertEqual(conn2.socket, conn3.socket)
+
+        self.loop.run_until_complete(conn())
+
+    def test_socket_repare(self):
+
+        @asyncio.coroutine
+        def conn():
+            conn1 = yield from self.factory.connect()
+            conn2 = yield from self.factory.connect()
+            self.assertIsNotNone(conn1.socket)
+            self.assertTrue(conn1.socket.open)
+            self.assertIsNotNone(conn2.socket)
+            self.assertTrue(conn2.socket.open)
+            conn1.socket.state = 'CLOSED'
+            conn2.socket.state = 'CLOSED'
+            self.assertFalse(conn1.socket.open)
+            self.assertFalse(conn1.open)
+            self.assertFalse(conn2.socket.open)
+            self.assertFalse(conn2.open)
+            conn1.close()
+            conn2.close()
+            conn1 = yield from self.factory.connect()
+            conn2 = yield from self.factory.connect()
+            self.assertIsNotNone(conn1.socket)
+            self.assertTrue(conn1.socket.open)
+            self.assertIsNotNone(conn2.socket)
+            self.assertTrue(conn2.socket.open)
+
+        self.loop.run_until_complete(conn())
 
 
 if __name__ == "__main__":
