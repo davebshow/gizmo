@@ -111,7 +111,7 @@ class AsyncGremlinClient:
         processor = processor or self.processor
         mime_len = b"\x10"
         mime_type = b"application/json"
-        body = {
+        payload = {
             "requestId": str(uuid.uuid4()),
             "op": op,
             "processor": processor,
@@ -121,8 +121,7 @@ class AsyncGremlinClient:
                 "language":  lang
             }
         }
-        body = bytes(json.dumps(body), "utf-8")
-        payload = mime_len + mime_type + body
+        message = mime_len + mime_type + bytes(json.dumps(payload), "utf-8")
         if websocket is None:
             websocket = yield from self.connection.connect(self.uri)
         else:  # Expect raw websocket.
@@ -131,7 +130,7 @@ class AsyncGremlinClient:
             except SocketError:
                 websocket = yield from asyncio.async(self.connect(),
                     loop=self._loop)
-        yield from websocket.send(payload)
+        yield from websocket.send(message)
         return websocket
 
     @asyncio.coroutine
