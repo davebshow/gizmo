@@ -121,7 +121,8 @@ class AsyncGremlinClient:
                 "language":  lang
             }
         }
-        message = mime_len + mime_type + bytes(json.dumps(payload), "utf-8")
+        message = b"".join([mime_len, mime_type,
+            bytes(json.dumps(payload), "utf-8")])
         if websocket is None:
             websocket = yield from self.connection.connect(self.uri)
         else:  # Expect raw websocket.
