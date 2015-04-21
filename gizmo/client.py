@@ -109,7 +109,9 @@ class AsyncGremlinClient:
         lang = lang or self.lang
         op = op or self.op
         processor = processor or self.processor
-        payload = {
+        mime_len = b"\x10"
+        mime_type = b"application/json"
+        body = {
             "requestId": str(uuid.uuid4()),
             "op": op,
             "processor": processor,
@@ -119,6 +121,8 @@ class AsyncGremlinClient:
                 "language":  lang
             }
         }
+        body = bytes(json.dumps(body), "utf-8")
+        payload = mime_len + mime_type + body
         if websocket is None:
             websocket = yield from self.connection.connect(self.uri)
         else:  # Expect raw websocket.
@@ -127,7 +131,7 @@ class AsyncGremlinClient:
             except SocketError:
                 websocket = yield from asyncio.async(self.connect(),
                     loop=self._loop)
-        yield from websocket.send(json.dumps(payload))
+        yield from websocket.send(payload)
         return websocket
 
     @asyncio.coroutine
@@ -197,7 +201,7 @@ class AsyncGremlinClient:
         """
         socket_error_handler(websocket)
         message = yield from websocket.recv()
-        message = json.loads(message)
+        message = json.loads(message.decode())
         message = GremlinResponse(message)
         if message.status_code == 200:
             self.messages.put_nowait(message)
@@ -219,7 +223,7 @@ class AsyncGremlinClient:
         socket_error_handler(websocket)
         while True:
             message = yield from websocket.recv()
-            message = json.loads(message)
+            message = json.loads(message.decode())
             message = GremlinResponse(message)
             if message.status_code == 200:
                 if consumer:

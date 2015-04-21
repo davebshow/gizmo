@@ -25,21 +25,13 @@ class Task:
         self.coro = coro(*args, **kwargs)
 
     def __call__(self):
-        task = asyncio.async(self.coro)
-        coro = self.error_handler(task)
-        self.task = asyncio.async(coro, loop=self.loop)
+        self.task = asyncio.async(self.coro, loop=self.loop)
         return self.task
 
     def execute(self):
         if not hasattr(self, "task"):
             self()
         self.loop.run_until_complete(self.task)
-
-    def error_handler(self, task):
-        try:
-            yield from task
-        except Exception as e:
-            raise e
 
 
 class Group(Task):
@@ -74,9 +66,7 @@ class Chain(Group):
         self.coro = self.dequeue(task_queue)
 
     def __call__(self):
-        task = asyncio.async(self.coro, loop=self.loop)
-        coro = self.error_handler(task)
-        self.task = asyncio.async(coro, loop=self.loop)
+        self.task = asyncio.async(self.coro, loop=self.loop)
         return self.task
 
     @asyncio.coroutine

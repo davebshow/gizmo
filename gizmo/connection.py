@@ -46,7 +46,7 @@ class ConnectionManager:
         try:
             socket_error_handler(socket)
         except SocketError:
-            socket = yield from self.connect()
+            socket = yield from self.connect(uri)
         else:
             self.active_conns.add(socket)
             socket = Connection(socket, self)
@@ -56,7 +56,6 @@ class ConnectionManager:
         try:
             self.pool.put_nowait(socket)
         except asyncio.QueueFull:
-            print("Queue full")
             pass
 
 
