@@ -4,10 +4,11 @@ try:
     import aiohttp
 except ImportError:
     aiohttp = None
-    try:
-        import websockets
-    except ImportError:
-        websockets = None
+try:
+    import websockets
+except ImportError:
+    websockets = None
+    if not aiohttp:
         print(" ".join(["websockets has been uninstalled. Please install either",
             "websockets using `pip install websockets` or aiohttp using `pip",
             "install aiohttp`. You can also define your own socket",
@@ -124,7 +125,7 @@ class BaseConnection:
         return bool(self.socket)
 
     def close(self, destroy=False):
-        if manager:
+        if self.manager:
             self.manager.remove_active_conn(self)
 
     @property
