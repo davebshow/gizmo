@@ -6,7 +6,8 @@ import asyncio
 import websockets
 import unittest
 from gizmo import (AsyncGremlinClient, async, group, chain, chord, RequestError,
-    GremlinServerError, SocketError, ConnectionManager)
+    GremlinServerError, SocketError, ConnectionManager, aiohttp_factory,
+    websockets_factory)
 
 
 @asyncio.coroutine
@@ -23,7 +24,8 @@ def consumer_coro2(x):
 class AsyncGremlinClientTests(unittest.TestCase):
 
     def setUp(self):
-        self.gc = AsyncGremlinClient("ws://localhost:8182/")
+        self.gc = AsyncGremlinClient("ws://localhost:8182/",
+            factory=websockets_factory)
 
     def test_connection(self):
         @asyncio.coroutine
@@ -302,18 +304,18 @@ class AsyncGremlinClientTests(unittest.TestCase):
 class ConnectionManagerTests(unittest.TestCase):
 
     def setUp(self):
-        self.factory = ConnectionManager(max_conn=2, timeout=1)
+        self.manager = ConnectionManager(max_conn=2, timeout=1)
         self.loop = asyncio.get_event_loop()
 
     def test_connect(self):
 
         @asyncio.coroutine
         def conn():
-            conn = yield from self.factory.connect()
+            conn = yield from self.manager.connect()
             self.assertIsNotNone(conn.socket)
-            self.assertTrue(conn.socket.open)
+            self.assertTrue(conn.open)
             conn.close()
-            self.assertEqual(self.factory.num_active_conns, 0)
+            self.assertEqual(self.manager.num_active_conns, 0)
 
         self.loop.run_until_complete(conn())
 
@@ -321,16 +323,16 @@ class ConnectionManagerTests(unittest.TestCase):
 
         @asyncio.coroutine
         def conn():
-            conn1 = yield from self.factory.connect()
-            conn2 = yield from self.factory.connect()
+            conn1 = yield from self.manager.connect()
+            conn2 = yield from self.manager.connect()
             self.assertIsNotNone(conn1.socket)
-            self.assertTrue(conn1.socket.open)
+            self.assertTrue(conn1.open)
             self.assertIsNotNone(conn2.socket)
-            self.assertTrue(conn2.socket.open)
+            self.assertTrue(conn2.open)
             conn1.close()
-            self.assertEqual(self.factory.num_active_conns, 1)
+            self.assertEqual(self.manager.num_active_conns, 1)
             conn2.close()
-            self.assertEqual(self.factory.num_active_conns, 0)
+            self.assertEqual(self.manager.num_active_conns, 0)
 
         self.loop.run_until_complete(conn())
 
@@ -338,10 +340,10 @@ class ConnectionManagerTests(unittest.TestCase):
 
         @asyncio.coroutine
         def conn():
-            conn1 = yield from self.factory.connect()
-            conn2 = yield from self.factory.connect()
+            conn1 = yield from self.manager.connect()
+            conn2 = yield from self.manager.connect()
             try:
-                conn3 = yield from self.factory.connect()
+                conn3 = yield from self.manager.connect()
                 timeout = False
             except asyncio.TimeoutError:
                 timeout = True
@@ -353,20 +355,20 @@ class ConnectionManagerTests(unittest.TestCase):
 
         @asyncio.coroutine
         def conn():
-            conn1 = yield from self.factory.connect()
-            conn2 = yield from self.factory.connect()
+            conn1 = yield from self.manager.connect()
+            conn2 = yield from self.manager.connect()
             try:
-                conn3 = yield from self.factory.connect()
+                conn3 = yield from self.manager.connect()
                 timeout = False
             except asyncio.TimeoutError:
                 timeout = True
             self.assertTrue(timeout)
             conn2.close()
-            conn3 = yield from self.factory.connect()
+            conn3 = yield from self.manager.connect()
             self.assertIsNotNone(conn1.socket)
-            self.assertTrue(conn1.socket.open)
+            self.assertTrue(conn1.open)
             self.assertIsNotNone(conn3.socket)
-            self.assertTrue(conn3.socket.open)
+            self.assertTrue(conn3.open)
             self.assertEqual(conn2.socket, conn3.socket)
 
         self.loop.run_until_complete(conn())
@@ -375,28 +377,45 @@ class ConnectionManagerTests(unittest.TestCase):
 
         @asyncio.coroutine
         def conn():
-            conn1 = yield from self.factory.connect()
-            conn2 = yield from self.factory.connect()
+            conn1 = yield from self.manager.connect()
+            conn2 = yield from self.manager.connect()
             self.assertIsNotNone(conn1.socket)
-            self.assertTrue(conn1.socket.open)
+            self.assertTrue(conn1.open)
             self.assertIsNotNone(conn2.socket)
-            self.assertTrue(conn2.socket.open)
+            self.assertTrue(conn2.open)
             conn1.socket.state = 'CLOSED'
             conn2.socket.state = 'CLOSED'
-            self.assertFalse(conn1.socket.open)
+            conn1.socket._closed = True
+            conn2.socket._closed = True
             self.assertFalse(conn1.open)
-            self.assertFalse(conn2.socket.open)
+            self.assertFalse(conn1.open)
+            self.assertFalse(conn2.open)
             self.assertFalse(conn2.open)
             conn1.close()
             conn2.close()
-            conn1 = yield from self.factory.connect()
-            conn2 = yield from self.factory.connect()
+            conn1 = yield from self.manager.connect()
+            conn2 = yield from self.manager.connect()
             self.assertIsNotNone(conn1.socket)
-            self.assertTrue(conn1.socket.open)
+            self.assertTrue(conn1.open)
             self.assertIsNotNone(conn2.socket)
-            self.assertTrue(conn2.socket.open)
+            self.assertTrue(conn2.open)
 
         self.loop.run_until_complete(conn())
+
+
+class AiohttpAsyncGremlinClientTests(AsyncGremlinClientTests):
+
+    def setUp(self):
+        self.gc = AsyncGremlinClient("ws://localhost:8182/",
+            factory=aiohttp_factory)
+
+
+class AiohttpConnectionManagerTests(ConnectionManagerTests):
+
+    def setUp(self):
+        self.manager = ConnectionManager(factory=aiohttp_factory, max_conn=2,
+            timeout=1)
+        self.loop = asyncio.get_event_loop()
 
 
 if __name__ == "__main__":

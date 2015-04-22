@@ -8,9 +8,8 @@ import asyncio
 import json
 import ssl
 import uuid
-import websockets
 from .connection import ConnectionManager
-from .exceptions import SocketError, GremlinServerError
+from .exceptions import SocketError
 from .handlers import status_error_handler, socket_error_handler
 from .response import GremlinResponse
 from .tasks import async
@@ -20,8 +19,8 @@ class AsyncGremlinClient:
 
     def __init__(self, uri='ws://localhost:8182/', loop=None, ssl=None,
                  protocol=None, lang="gremlin-groovy", op="eval",
-                 processor="", connection=None, max_conn=10, timeout=None,
-                 **kwargs):
+                 processor="", factory=None, max_conn=10,
+                 timeout=None, **kwargs):
         """
         Asynchronous Client for the asyncio API.
 
@@ -44,8 +43,10 @@ class AsyncGremlinClient:
         self.lang = lang or "gremlin-groovy"
         self.op = op or "eval"
         self.processor = processor or ""
-        self.connection = connection or ConnectionManager(uri, max_conn=max_conn,
-            timeout=timeout, loop=self._loop)
+        self.manager = ConnectionManager(uri, factory=factory,
+            max_conn=max_conn, timeout=timeout, loop=self._loop)
+        self.factory = factory or self.manager.factory
+        self.client = self.manager.client
         self._messages = asyncio.Queue()
 
     def get_messages(self):
@@ -89,13 +90,14 @@ class AsyncGremlinClient:
 
         :returns: websockets.WebSocketClientProtocol
         """
-        websocket = yield from websockets.connect(self.uri, **kwargs)
-        # self._sock = websocket
+        loop = kwargs.get("loop", "") or self._loop
+        websocket = yield from self.factory.connect(self.uri, loop=loop,
+            **kwargs)
         return websocket
 
     @asyncio.coroutine
-    def send(self, gremlin, websocket=None, bindings=None, lang="gremlin-groovy", op="eval",
-             processor=""):
+    def send(self, gremlin, websocket=None, bindings=None, lang="gremlin-groovy",
+             op="eval", processor=""):
         """
         Coroutine that sends a message to the Gremlin Server.
 
@@ -123,7 +125,7 @@ class AsyncGremlinClient:
         })
         message = b"".join([mime_len, mime_type, bytes(payload, "utf-8")])
         if websocket is None:
-            websocket = yield from self.connection.connect(self.uri)
+            websocket = yield from self.manager.connect(self.uri, loop=self._loop)
         else:  # Expect raw websocket.
             try:
                 socket_error_handler(websocket)
