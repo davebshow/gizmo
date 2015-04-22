@@ -46,7 +46,6 @@ class AsyncGremlinClient:
         self.manager = ConnectionManager(uri, factory=factory,
             max_conn=max_conn, timeout=timeout, loop=self._loop)
         self.factory = factory or self.manager.factory
-        self.client = self.manager.client
         self._messages = asyncio.Queue()
 
     def get_messages(self):

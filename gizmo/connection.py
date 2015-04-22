@@ -28,17 +28,13 @@ class ConnectionManager:
         self.uri = uri
         if aiohttp:
             default_factory = aiohttp_factory
-            self.client = '{}{}'.format(aiohttp.__package__,
-                aiohttp.__version__)
         elif websockets:
             default_factory = websockets_factory
-            self.client = '{}{}'.format(websockets.__package__,
-                websockets.__version__)
         else:
             default_factory = None
         self.factory = factory or default_factory
         if not self.factory:
-            raise Exception("No factory provided. Choose a websocket client")
+            raise Exception("No factory provided. Choose a websocket client.")
         self.max_conn = max_conn
         self.timeout = timeout
         self._loop = loop or asyncio.get_event_loop()
