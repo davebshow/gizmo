@@ -267,7 +267,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
             results = []
             websocket = yield from self.gc.send("x + x", bindings={"x": 4})
             while True:
-                f = yield from self.gc.recv(websocket)
+                f = yield from self.gc._receive(websocket)
                 if f is None:
                     break
                 else:

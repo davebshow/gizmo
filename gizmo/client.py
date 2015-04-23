@@ -207,6 +207,7 @@ class AsyncGremlinClient:
         message = GremlinResponse(message)
         if message.status_code == 200:
             self.messages.put_nowait(message)
+            return message
         elif message.status_code == 299:
             connection.close()
             pass

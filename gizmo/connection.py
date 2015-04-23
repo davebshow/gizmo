@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 try:
     import aiohttp
@@ -18,10 +19,14 @@ from .exceptions import SocketError
 from .handlers import socket_error_handler
 
 
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+
 class ConnectionManager:
 
     def __init__(self, uri='ws://localhost:8182/', factory=None, max_conn=10,
-                 timeout=None, loop=None):
+                 timeout=None, loop=None, verbose=False):
         """
         Very simple manager for socket connections. Basically just creates and
         loans out connected sockets.
@@ -42,6 +47,9 @@ class ConnectionManager:
         self.pool = asyncio.Queue(maxsize=self.max_conn, loop=self._loop)
         self.active_conns = set()
         self.num_connecting = 0
+        self.logger = logging.getLogger(self.__class__.__name__)
+        if verbose:
+            self.logger.setLevel(logging.INFO)
 
     @property
     def factory(self):
@@ -61,23 +69,28 @@ class ConnectionManager:
         loop = loop or self._loop
         if not self.pool.empty():
             socket = self.pool.get_nowait()
-            print("reusing")
+            self.logger.info("Reusing socket: {} at {}".format(socket, uri))
         elif (self.num_active_conns + self.num_connecting >= self.max_conn or
             not self.max_conn):
+            self.logger.info("Waiting for socket...")
             socket = yield from asyncio.wait_for(self.pool.get(),
                 self.timeout, loop=loop)
-            print("waiting for socket")
+            self.logger.info("Socket acquired: {} at {}".format(socket, uri))
         else:
             self.num_connecting += 1
             try:
                 socket = yield from self.factory.connect(uri, manager=self,
                     loop=loop)
-                print("got new socket")
+                self.logger.info("New connection on socket: {} at {}".format(
+                    socket, uri))
             finally:
                 self.num_connecting -= 1
         try:
             socket_error_handler(socket)
-        except SocketError:
+        except SocketError as e:
+            self.logger.info(
+                "Error on socket: {} - {}, attempting to reconnect...".format(
+                socket, e))
             socket = yield from self.connect(uri)
         else:
             self.active_conns.add(socket)
@@ -138,6 +151,9 @@ class BaseConnection:
     def close(self, destroy=False):
         if self.manager:
             self.manager.remove_active_conn(self)
+
+    def __str__(self):
+        return repr(self.socket)
 
     @property
     def open(self):
