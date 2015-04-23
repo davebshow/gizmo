@@ -33,15 +33,19 @@ class ConnectionManager:
             default_factory = websockets_factory
         else:
             default_factory = None
-        self.factory = factory or default_factory
-        if not self.factory:
-            raise Exception("No factory provided. Choose a websocket client.")
+        self._factory = factory or default_factory
+        if not self._factory:
+            raise RuntimeError("No factory provided. Choose a websocket client.")
         self.max_conn = max_conn
         self.timeout = timeout
         self._loop = loop or asyncio.get_event_loop()
         self.pool = asyncio.Queue(maxsize=self.max_conn, loop=self._loop)
         self.active_conns = set()
         self.num_connecting = 0
+
+    @property
+    def factory(self):
+        return self._factory
 
     @property
     def num_active_conns(self):
@@ -57,15 +61,18 @@ class ConnectionManager:
         loop = loop or self._loop
         if not self.pool.empty():
             socket = self.pool.get_nowait()
+            print("reusing")
         elif (self.num_active_conns + self.num_connecting >= self.max_conn or
             not self.max_conn):
             socket = yield from asyncio.wait_for(self.pool.get(),
                 self.timeout, loop=loop)
+            print("waiting for socket")
         else:
             self.num_connecting += 1
             try:
                 socket = yield from self.factory.connect(uri, manager=self,
                     loop=loop)
+                print("got new socket")
             finally:
                 self.num_connecting -= 1
         try:
@@ -89,6 +96,10 @@ class BaseFactory:
     @asyncio.coroutine
     def connect(cls, uri='ws://localhost:8182/', manager=None, **kwargs):
         raise NotImplementedError
+
+    @property
+    def factory(self):
+        return self
 
 
 class WebsocketsFactory(BaseFactory):

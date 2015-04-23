@@ -3,6 +3,7 @@ Basic test cases, will build a larger graph and make end2end tests.
 """
 
 import asyncio
+import itertools
 import websockets
 import unittest
 from gizmo import (AsyncGremlinClient, async, group, chain, chord, RequestError,
@@ -17,7 +18,7 @@ def consumer_coro1(x):
 
 
 def consumer_coro2(x):
-    yield from asyncio.sleep(0.50)
+    yield from asyncio.sleep(0.5)
     return x[0] ** 1
 
 
@@ -37,10 +38,9 @@ class AsyncGremlinClientTests(unittest.TestCase):
 
     def test_task(self):
         t = async(self.gc.submit, "x + x", bindings={"x": 2},
-            consumer=lambda x : x[0] ** 2, loop=self.gc._loop)
-        t.execute()
-        message = self.gc.read()
-        self.assertEqual(16, message)
+            consumer=lambda x : x, loop=self.gc._loop)
+        message = t.execute()
+        self.assertEqual(4, message[0])
 
     def test_task_error(self):
         t = async(self.gc.submit, "x + x g.adasdfd", bindings={"x": 2},
@@ -56,9 +56,8 @@ class AsyncGremlinClientTests(unittest.TestCase):
         t = self.gc.s("x + x", bindings={"x": 2},
             consumer=lambda x : x[0] ** 2)
         t()
-        t.execute()
-        message = self.gc.read()
-        self.assertEqual(16, message)
+        message = t.get()
+        self.assertEqual(16, message[0])
 
     def test_group(self):
         t = self.gc.s("x + x", bindings={"x": 2},
@@ -66,12 +65,11 @@ class AsyncGremlinClientTests(unittest.TestCase):
         slow = self.gc.s("x + x", bindings={"x": 2},
             consumer=consumer_coro1)
         g = group(slow, t)
-        g.execute()
-        results = []
-        while not self.gc.messages.empty():
-            results.append(self.gc.read())
-        self.assertEqual(results[0], 16)
-        self.assertEqual(results[1], 1)
+        results = g.execute()
+        self.assertEqual(len(results), 2)
+        results = list(itertools.chain.from_iterable(results))
+        self.assertTrue(16 in results)
+        self.assertTrue(1 in results)
 
     def test_group_error(self):
         t = self.gc.s("x + x g.sdfa", bindings={"x": 2},
@@ -86,7 +84,6 @@ class AsyncGremlinClientTests(unittest.TestCase):
             error = True
         self.assertTrue(error)
 
-    #This operation is problematic
     def test_group_of_groups(self):
         fast = self.gc.s("x + x", bindings={"x": 2},
             consumer=lambda x : x[0] ** 2)
@@ -96,14 +93,18 @@ class AsyncGremlinClientTests(unittest.TestCase):
         slow1 = self.gc.s("x + x", bindings={"x": 2}, consumer=consumer_coro1)
         g = group(fast, fast1)
         g1 = group(slow, slow1)
-        group(g, g1).execute()
-        results = []
-        while not self.gc.messages.empty():
-            results.append(self.gc.read())
-        self.assertEqual(results[0], 16)
-        self.assertEqual(results[1], 16)
-        self.assertEqual(results[2], 1)
-        self.assertEqual(results[3], 1)
+        results = group(g, g1).execute()
+        self.assertEqual(len(results), 2)
+        self.assertEqual(len(results[0]), 2)
+        self.assertEqual(len(results[1]), 2)
+        results = list(itertools.chain.from_iterable(results))
+        results = list(itertools.chain.from_iterable(results))
+        self.assertTrue(1 in results)
+        self.assertTrue(16 in results)
+        results.remove(1)
+        results.remove(16)
+        self.assertTrue(1 in results)
+        self.assertTrue(16 in results)
 
     def test_group_itrbl_arg(self):
         t = self.gc.s("x + x", bindings={"x": 2},
@@ -111,24 +112,20 @@ class AsyncGremlinClientTests(unittest.TestCase):
         slow = self.gc.s("x + x", bindings={"x": 2},
             consumer=consumer_coro1)
         g = group([slow, t])
-        g.execute()
-        results = []
-        while not self.gc.messages.empty():
-            results.append(self.gc.read())
-        self.assertEqual(results[0], 16)
-        self.assertEqual(results[1], 1)
+        results = g.execute()
+        self.assertEqual(len(results), 2)
+        results = list(itertools.chain.from_iterable(results))
+        self.assertTrue(1 in results)
+        self.assertTrue(16 in results)
 
     def test_chain(self):
         t = self.gc.s("x + x", bindings={"x": 2},
             consumer=lambda x : x[0] ** 2)
         slow = self.gc.s("x + x", bindings={"x": 2},
             consumer=consumer_coro1)
-        chain(slow, t).execute()
-        results = []
-        while not self.gc.messages.empty():
-            results.append(self.gc.read())
-        self.assertEqual(results[0], 1)
-        self.assertEqual(results[1], 16)
+        results = chain(slow, t).execute()
+        self.assertEqual(results[0][0], 1)
+        self.assertEqual(results[1][0], 16)
 
     def test_chain_error(self):
         t = self.gc.s("x + x g.sadf", bindings={"x": 2},
@@ -148,17 +145,12 @@ class AsyncGremlinClientTests(unittest.TestCase):
         slow1 = self.gc.s("x + x", bindings={"x": 2},
             consumer=consumer_coro1)
         slow_chain = chain(slow, slow1)
-
         t = self.gc.s("x + x", bindings={"x": 2},
             consumer=lambda x : x[0] ** 2)
-        group(slow_chain, t).execute()
-        results = []
-        while not self.gc.messages.empty():
-            results.append(self.gc.read())
-        print(results)
-        self.assertTrue(results.index(4) < results.index(1))
-        self.assertTrue(results.index(16) < results.index(1))
-        self.assertTrue(results.index(16) < results.index(4))
+        results = group(slow_chain, t).execute()
+        self.assertEqual(slow_chain.result[0][0], 4)
+        self.assertEqual(slow_chain.result[1][0], 1)
+        self.assertEqual(t.result[0], 16)
 
     def test_chains_in_group_error(self):
         slow = self.gc.s("x + x g.edfsa", bindings={"x": 2},
@@ -181,12 +173,9 @@ class AsyncGremlinClientTests(unittest.TestCase):
             consumer=lambda x : x[0] ** 2)
         slow = self.gc.s("x + x", bindings={"x": 2},
             consumer=consumer_coro1)
-        chain([slow, t]).execute()
-        results = []
-        while not self.gc.messages.empty():
-            results.append(self.gc.read())
-        self.assertEqual(results[0], 1)
-        self.assertEqual(results[1], 16)
+        results = chain([slow, t]).execute()
+        self.assertEqual(results[0][0], 1)
+        self.assertEqual(results[1][0], 16)
 
     def test_group_chain(self):
         results = []
@@ -198,13 +187,11 @@ class AsyncGremlinClientTests(unittest.TestCase):
         fast1 = self.gc.s("x + x", bindings={"x": 2},
             consumer=lambda x : x[0] ** 2)
         fast_group = group(fast, fast1)
-        chain(slow_group, fast_group).execute()
-        while not self.gc.messages.empty():
-            results.append(self.gc.read())
-        self.assertEqual(results[0], 1)
-        self.assertEqual(results[1], 1)
-        self.assertEqual(results[2], 16)
-        self.assertEqual(results[3], 16)
+        results = chain(slow_group, fast_group).execute()
+        self.assertEqual(results[0][0][0], 1)
+        self.assertEqual(results[0][1][0], 1)
+        self.assertEqual(results[1][0][0], 16)
+        self.assertEqual(results[1][1][0], 16)
 
     def test_chord(self):
         slow1 = self.gc.s("x + x", bindings={"x": 2},
@@ -213,13 +200,11 @@ class AsyncGremlinClientTests(unittest.TestCase):
             consumer=consumer_coro2)
         t = self.gc.s("x + x", bindings={"x": 2},
             consumer=lambda x : x[0] ** 2)
-        chord([slow2, slow1], t).execute()
-        results = []
-        while not self.gc.messages.empty():
-            results.append(self.gc.read())
-        self.assertEqual(results[0], 1)
-        self.assertEqual(results[1], 4)
-        self.assertEqual(results[2], 16)
+        results = chord([slow2, slow1], t).execute()
+        group = list(itertools.chain.from_iterable(results[0]))
+        self.assertTrue(1 in group)
+        self.assertTrue(4 in group)
+        self.assertEqual(results[1][0], 16)
 
     def test_chord_group_error(self):
         slow1 = self.gc.s("x + x g.asdf", bindings={"x": 2},
@@ -264,11 +249,17 @@ class AsyncGremlinClientTests(unittest.TestCase):
         t10 = self.gc.s("g.V().count();", consumer=lambda x: self.assertEqual(x[0], 4))
         t11 = self.gc.s("g.E().count();", consumer=lambda x: self.assertEqual(x[0], 3))
         c = chain(t, g1, g2, t8, t9, t10, t11, t)
-        c.execute()
-        results = []
-        while not self.gc.messages.empty():
-            results.append(self.gc.read())
+        results = c.execute()
         print(results)
+
+    def test_sub(self):
+        @asyncio.coroutine
+        def sub_coro():
+            results = []
+            results = yield from self.gc.submit("x + x", bindings={"x": 4})
+            self.assertEqual(results[0][0], 8)
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(sub_coro())
 
     def test_recv(self):
         @asyncio.coroutine
@@ -285,13 +276,10 @@ class AsyncGremlinClientTests(unittest.TestCase):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(recv_coro())
 
-
     def test_submit_error(self):
-
         @asyncio.coroutine
         def submit_coro():
             yield from self.gc.submit("x + x g.asdfas", bindings={"x": 4})
-
         loop = asyncio.get_event_loop()
         try:
             loop.run_until_complete(submit_coro())

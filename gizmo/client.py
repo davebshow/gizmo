@@ -8,6 +8,7 @@ import asyncio
 import json
 import ssl
 import uuid
+
 from .connection import ConnectionManager
 from .exceptions import SocketError
 from .handlers import status_error_handler, socket_error_handler
@@ -19,7 +20,7 @@ class AsyncGremlinClient:
 
     def __init__(self, uri='ws://localhost:8182/', loop=None, ssl=None,
                  protocol=None, lang="gremlin-groovy", op="eval",
-                 processor="", factory=None, max_conn=10,
+                 processor="", manager=None, factory=None, max_conn=10,
                  timeout=None, **kwargs):
         """
         Asynchronous Client for the asyncio API.
@@ -37,25 +38,24 @@ class AsyncGremlinClient:
             ssl_context = ssl.SSLContext(protocol)
             ssl_context.load_verify_locations(ssl)
             ssl_context.verify_mode = ssl.CERT_REQUIRED
-            # Passed through to websockets.connect
             kwargs['ssl'] = ssl_context
         self._loop = loop or asyncio.get_event_loop()
         self.lang = lang or "gremlin-groovy"
         self.op = op or "eval"
         self.processor = processor or ""
-        self.manager = ConnectionManager(uri, factory=factory,
+        self.manager = manager or ConnectionManager(uri, factory=factory,
             max_conn=max_conn, timeout=timeout, loop=self._loop)
         self.factory = factory or self.manager.factory
         self._messages = asyncio.Queue()
 
-    def get_messages(self):
+    @property
+    def messages(self):
         """
         A read only property that returns the messages queue.
 
         :returns: asyncio.Queue
         """
         return self._messages
-    messages = property(get_messages)
 
     def __next__(self):
         """
@@ -85,17 +85,17 @@ class AsyncGremlinClient:
     @asyncio.coroutine
     def connect(self, **kwargs):
         """
-        Coroutine that returns a connected websocket.
+        Coroutine that returns a connected connection.
 
         :returns: websockets.WebSocketClientProtocol
         """
         loop = kwargs.get("loop", "") or self._loop
-        websocket = yield from self.factory.connect(self.uri, loop=loop,
+        connection = yield from self.factory.connect(self.uri, loop=loop,
             **kwargs)
-        return websocket
+        return connection
 
     @asyncio.coroutine
-    def send(self, gremlin, websocket=None, bindings=None, lang="gremlin-groovy",
+    def send(self, gremlin, connection=None, bindings=None, lang="gremlin-groovy",
              op="eval", processor=""):
         """
         Coroutine that sends a message to the Gremlin Server.
@@ -123,16 +123,16 @@ class AsyncGremlinClient:
             }
         })
         message = b"".join([mime_len, mime_type, bytes(payload, "utf-8")])
-        if websocket is None:
-            websocket = yield from self.manager.connect(self.uri, loop=self._loop)
-        else:  # Expect raw websocket.
+        if connection is None:
+            connection = yield from self.manager.connect(self.uri, loop=self._loop)
+        else:  # Expect raw connection.
             try:
-                socket_error_handler(websocket)
+                socket_error_handler(connection)
             except SocketError:
-                websocket = yield from asyncio.async(self.connect(),
+                connection = yield from asyncio.async(self.connect(),
                     loop=self._loop)
-        yield from websocket.send(message)
-        return websocket
+        yield from connection.send(message)
+        return connection
 
     @asyncio.coroutine
     def submit(self, gremlin, bindings=None, lang="gremlin-groovy",
@@ -151,9 +151,11 @@ class AsyncGremlinClient:
         :param collect: bool. Retain server messages on client object.
         :returns: None.
         """
-        websocket = yield from self.send(gremlin, bindings=bindings, lang=lang,
+        connection = yield from self.send(gremlin, bindings=bindings, lang=lang,
                 op=op, processor=processor)
-        yield from self.run(websocket, consumer=consumer, collect=collect)
+        results = yield from self.run(connection, consumer=consumer,
+            collect=collect)
+        return results
 
     def s(self, *args, **kwargs):
         """
@@ -164,11 +166,11 @@ class AsyncGremlinClient:
         return async(self.submit, *args, **kwargs)
 
     @asyncio.coroutine
-    def recv(self, websocket):
+    def recv(self, connection):
         """
         This recv is based on the websockets.WebSocketCommonProtocol.recv, but
         it uses AsyncGremlinClinet._receive to manage the Gremlin Server
-        response (the original uses a worker task to manage the websocket
+        response (the original uses a worker task to manage the connection
         connection.)
         https://github.com/aaugustin/websockets/blob/master/websockets/protocol.py#L150
 
@@ -182,7 +184,7 @@ class AsyncGremlinClient:
         next_message = asyncio.async(self.messages.get(), loop=self._loop)
         # If message return message future, else return None (or set_exception).
         done, pending = yield from asyncio.wait(
-            [next_message, asyncio.async(self._receive(websocket), loop=self._loop)],
+            [next_message, asyncio.async(self._receive(connection), loop=self._loop)],
             loop=self._loop, return_when=asyncio.FIRST_COMPLETED)
         # If message completed future was returned.
         if next_message in done:
@@ -194,25 +196,25 @@ class AsyncGremlinClient:
             f.result() # None or raise Error.
 
     @asyncio.coroutine
-    def _receive(self, websocket):
+    def _receive(self, connection):
         """
         This method manages the Gremlin Server passing the response to the recv
         method one message at a time.
         """
-        socket_error_handler(websocket)
-        message = yield from websocket.recv()
+        socket_error_handler(connection)
+        message = yield from connection.recv()
         message = json.loads(message.decode())
         message = GremlinResponse(message)
         if message.status_code == 200:
             self.messages.put_nowait(message)
         elif message.status_code == 299:
-            self.close_socket(websocket)
+            connection.close()
             pass
         else:
             status_error_handler(message.status_code, message.message)
 
     @asyncio.coroutine
-    def run(self, websocket, consumer=None, collect=True):
+    def run(self, connection, consumer=None, collect=True):
         """
         This message handles the whole Gremlin Server response, enqueueing the
         chunks on the message queue as they arrive.
@@ -220,9 +222,10 @@ class AsyncGremlinClient:
         :param consumer: func. Function to map to server messages.
         :param collect: bool. Retain server messages on client object.
         """
-        socket_error_handler(websocket)
+        results = []
+        socket_error_handler(connection)
         while True:
-            message = yield from websocket.recv()
+            message = yield from connection.recv()
             message = json.loads(message.decode())
             message = GremlinResponse(message)
             if message.status_code == 200:
@@ -231,16 +234,11 @@ class AsyncGremlinClient:
                     if asyncio.iscoroutine(message):
                         message = yield from asyncio.async(message)
                 if message and collect:
-                    self.messages.put_nowait(message)
+                    results.append(message)
             elif message.status_code == 299:
-                self.close_socket(websocket)
+                connection.close()
                 break
             else:
-                self.close_socket(websocket)
+                connection.close()
                 status_error_handler(message.status_code, message.message)
-
-    def close_socket(self, websocket):
-        try:
-            websocket.close()
-        except AttributeError:
-            pass
+        return results

@@ -1,4 +1,5 @@
 import asyncio
+import itertools
 
 
 def async(coro, *args, **kwargs):
@@ -21,8 +22,12 @@ class Task:
 
     def __init__(self, coro, *args, **kwargs):
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        self.client = coro.__self__
-        self.coro = coro(*args, **kwargs)
+        self.coro = self.set_raise_result(coro(*args, **kwargs))
+        self._result = None
+
+    @property
+    def result(self):
+        return self._result
 
     def __call__(self):
         self.task = asyncio.async(self.coro, loop=self.loop)
@@ -30,8 +35,21 @@ class Task:
 
     def execute(self):
         if not hasattr(self, "task"):
-            self()
+            self.__call__()
         self.loop.run_until_complete(self.task)
+        return self._result
+
+    @asyncio.coroutine
+    def set_raise_result(self, coro):
+        result = yield from coro
+        try:
+            self._result = list(itertools.chain.from_iterable(result))
+        except TypeError:
+            self._result = result
+        return self._result
+
+    def get(self):
+        return self.execute()
 
 
 class Group(Task):
@@ -39,22 +57,22 @@ class Group(Task):
     def __init__(self, *args, **kwargs):
         if len(args) == 1:
             args = args[0]
+        self.tasks = args
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        self.coro = asyncio.wait([t.coro for t in args], loop=self.loop,
+        coro = asyncio.wait([t.coro for t in self.tasks], loop=self.loop,
             return_when=asyncio.FIRST_EXCEPTION)
-
-    def __call__(self):
-        coro = self.wait_error_handler(self.coro)
-        self.task = asyncio.async(coro, loop=self.loop)
-        return self.task
+        self.coro = self.set_raise_result(coro)
+        self._result = None
 
     @asyncio.coroutine
-    def wait_error_handler(self, tasks):
+    def set_raise_result(self, tasks):
         done, pending = yield from tasks
-        errors = [f.result() for f in done]
+        result = [f.result() for f in done]
+        self._result = result
+        return self._result
 
 
-class Chain(Group):
+class Chain(Task):
 
     def __init__(self, *args, **kwargs):
         if len(args) == 1:
@@ -64,19 +82,19 @@ class Chain(Group):
         for t in args:
             task_queue.put_nowait(t)
         self.coro = self.dequeue(task_queue)
-
-    def __call__(self):
-        self.task = asyncio.async(self.coro, loop=self.loop)
-        return self.task
+        self._result = None
 
     @asyncio.coroutine
     def dequeue(self, queue):
+        self._result = []
         while not queue.empty():
             t = queue.get_nowait()
             if asyncio.iscoroutine(t):
-                yield from self.wait_error_handler(t)
+                result = yield from t
             else:
-                yield from t()
+                result = yield from t()
+            self._result.append(result)
+        return self._result
 
 
 class Chord(Chain):
@@ -85,7 +103,16 @@ class Chord(Chain):
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
         tasks = asyncio.wait([t.coro for t in itrbl], loop=self.loop,
             return_when=asyncio.FIRST_EXCEPTION)
+        tasks = self.get_raise_result(tasks)
         task_queue = asyncio.Queue()
         task_queue.put_nowait(tasks)
         task_queue.put_nowait(callback)
         self.coro = self.dequeue(task_queue)
+        self._result = None
+
+    @asyncio.coroutine
+    def get_raise_result(self, tasks):
+        done, pending = yield from tasks
+        result = [f.result() for f in done]
+        result = result
+        return result
