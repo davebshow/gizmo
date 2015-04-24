@@ -67,7 +67,8 @@ class ConnectionManager:
 
     @asyncio.coroutine
     def connect(self, uri=None, loop=None, num_retries=None):
-        num_retries = num_retries or self.max_retries
+        if num_retries is None:
+            num_retries = self.max_retries
         uri = uri or self.uri
         loop = loop or self._loop
         if not self.pool.empty():
@@ -90,8 +91,11 @@ class ConnectionManager:
                 self.num_connecting -= 1
         if socket.open:
             self.active_conns.add(socket)
-        else:
+        # Untested
+        elif num_retries > 0:
             socket = yield from self.connect(uri, loop, num_retries - 1)
+        else:
+            raise SocketClientError("Unable to connect, max retries exceeded.")
         return socket
 
     def _put(self, socket):
