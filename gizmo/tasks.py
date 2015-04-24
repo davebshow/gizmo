@@ -19,11 +19,11 @@ def chord(itrbl, callback, **kwargs):
     return Chord(itrbl, callback, **kwargs)
 
 
-class Task:
+class BaseTask:
 
-    def __init__(self, coro, *args, **kwargs):
+    def __init__(self, **kwargs):
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        self.coro = self.set_raise_result(coro(*args, **kwargs))
+        self.coro = None
         self._result = None
         verbose = kwargs.get("verbose", False)
         if verbose:
@@ -46,6 +46,25 @@ class Task:
         task_logger.info("Completed task: {}".format(self.task))
         return self._result
 
+    def get(self):
+        return self.execute()
+
+    @asyncio.coroutine
+    def _dequeue(self, queue):
+        self._result = []
+        while not queue.empty():
+            t = queue.get_nowait()
+            result = yield from t()
+            self._result.append(result)
+        return self._result
+
+
+class Task(BaseTask):
+
+    def __init__(self, coro, *args, **kwargs):
+        super().__init__(**kwargs)
+        self.coro = self.set_raise_result(coro(*args, **kwargs))
+
     @asyncio.coroutine
     def set_raise_result(self, coro):
         result = yield from coro
@@ -55,23 +74,16 @@ class Task:
             self._result = result
         return self._result
 
-    def get(self):
-        return self.execute()
 
-
-class Group(Task):
+class Group(BaseTask):
 
     def __init__(self, *args, **kwargs):
+        super().__init__(**kwargs)
         if len(args) == 1:
             args = args[0]
-        self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
         coro = asyncio.wait([t.coro for t in args], loop=self.loop,
             return_when=asyncio.FIRST_EXCEPTION)
         self.coro = self.set_raise_result(coro)
-        self._result = None
-        verbose = kwargs.get("verbose", False)
-        if verbose:
-            task_logger.setLevel(INFO)
 
     @asyncio.coroutine
     def set_raise_result(self, tasks):
@@ -81,41 +93,24 @@ class Group(Task):
         return self._result
 
 
-class Chain(Task):
+class Chain(BaseTask):
 
     def __init__(self, *args, **kwargs):
+        super().__init__(**kwargs)
         if len(args) == 1:
             args = args[0]
-        self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
         task_queue = asyncio.Queue()
         for t in args:
             task_queue.put_nowait(t)
-        self.coro = self.dequeue(task_queue)
-        self._result = None
-        verbose = kwargs.get("verbose", False)
-        if verbose:
-            task_logger.setLevel(INFO)
-
-    @asyncio.coroutine
-    def dequeue(self, queue):
-        self._result = []
-        while not queue.empty():
-            t = queue.get_nowait()
-            result = yield from t()
-            self._result.append(result)
-        return self._result
+        self.coro = self._dequeue(task_queue)
 
 
-class Chord(Chain):
+class Chord(BaseTask):
 
     def __init__(self, itrbl, callback, **kwargs):
-        self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
+        super().__init__(**kwargs)
         g = Group(itrbl)
         task_queue = asyncio.Queue()
         task_queue.put_nowait(g)
         task_queue.put_nowait(callback)
-        self.coro = self.dequeue(task_queue)
-        self._result = None
-        verbose = kwargs.get("verbose", False)
-        if verbose:
-            task_logger.setLevel(INFO)
+        self.coro = self._dequeue(task_queue)

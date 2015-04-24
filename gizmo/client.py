@@ -47,31 +47,6 @@ class AsyncGremlinClient:
             max_conn=max_conn, timeout=timeout, loop=self._loop)
         self.factory = factory or self.manager.factory
 
-    def __next__(self):
-        """
-        Step over the message queue.
-
-        :returns: Next element in the message queue.
-        """
-        try:
-            return self.messages.get_nowait()
-        except asyncio.QueueEmpty:
-            raise StopIteration
-
-    def __iter__(self):
-        return self
-
-    def read(self):
-        """
-        Read off the message queue.
-
-        :returns: Next element in the message queue.
-        """
-        try:
-            return self.messages.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
-
     @asyncio.coroutine
     def connect(self, **kwargs):
         """
