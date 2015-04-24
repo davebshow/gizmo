@@ -1,32 +1,30 @@
 import asyncio
-import logging
 
+from .exceptions import SocketClientError
+from .log import INFO, conn_logger
+
+# Hesitant to commit to aiohttp...
 try:
     import aiohttp
 except ImportError:
+    conn_logger.warn(" ".join(["aiohttp is the preferred websocket client for",
+        "gizmo. Attempting to use websockets instead."]))
     aiohttp = None
 try:
     import websockets
 except ImportError:
     websockets = None
     if not aiohttp:
-        print(" ".join(["websockets has been uninstalled. Please install either",
-            "websockets using `pip install websockets` or aiohttp using `pip",
-            "install aiohttp`. You can also define your own socket",
+        conn_logger.warn(" ".join(["websockets has been uninstalled. Please install",
+            "either websockets using `pip install websockets` or aiohttp using",
+            "`pip install aiohttp`. You can also define your own socket",
             "implementation using factory and connection classes see docs:"]))
-
-from .exceptions import SocketError
-from .handlers import socket_error_handler
-
-
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 
 class ConnectionManager:
 
     def __init__(self, uri='ws://localhost:8182/', factory=None, max_conn=10,
-                 timeout=None, loop=None, verbose=False):
+                 max_retries=10, timeout=None, loop=None, verbose=False):
         """
         Very simple manager for socket connections. Basically just creates and
         loans out connected sockets.
@@ -42,14 +40,18 @@ class ConnectionManager:
         if not self._factory:
             raise RuntimeError("No factory provided. Choose a websocket client.")
         self.max_conn = max_conn
+        self.max_retries = max_retries
         self.timeout = timeout
         self._loop = loop or asyncio.get_event_loop()
         self.pool = asyncio.Queue(maxsize=self.max_conn, loop=self._loop)
         self.active_conns = set()
         self.num_connecting = 0
-        self.logger = logging.getLogger(self.__class__.__name__)
         if verbose:
-            self.logger.setLevel(logging.INFO)
+            conn_logger.setLevel(INFO)
+
+    @property
+    def loop(self):
+        return self._loop
 
     @property
     def factory(self):
@@ -64,36 +66,32 @@ class ConnectionManager:
         self._put(conn)
 
     @asyncio.coroutine
-    def connect(self, uri=None, loop=None):
+    def connect(self, uri=None, loop=None, num_retries=None):
+        num_retries = num_retries or self.max_retries
         uri = uri or self.uri
         loop = loop or self._loop
         if not self.pool.empty():
             socket = self.pool.get_nowait()
-            self.logger.info("Reusing socket: {} at {}".format(socket, uri))
+            conn_logger.info("Reusing socket: {} at {}".format(socket, uri))
         elif (self.num_active_conns + self.num_connecting >= self.max_conn or
             not self.max_conn):
-            self.logger.info("Waiting for socket...")
+            conn_logger.info("Waiting for socket...")
             socket = yield from asyncio.wait_for(self.pool.get(),
                 self.timeout, loop=loop)
-            self.logger.info("Socket acquired: {} at {}".format(socket, uri))
+            conn_logger.info("Socket acquired: {} at {}".format(socket, uri))
         else:
             self.num_connecting += 1
             try:
                 socket = yield from self.factory.connect(uri, manager=self,
                     loop=loop)
-                self.logger.info("New connection on socket: {} at {}".format(
+                conn_logger.info("New connection on socket: {} at {}".format(
                     socket, uri))
             finally:
                 self.num_connecting -= 1
-        try:
-            socket_error_handler(socket)
-        except SocketError as e:
-            self.logger.info(
-                "Error on socket: {} - {}, attempting to reconnect...".format(
-                socket, e))
-            socket = yield from self.connect(uri)
-        else:
+        if socket.open:
             self.active_conns.add(socket)
+        else:
+            socket = yield from self.connect(uri, loop, num_retries - 1)
         return socket
 
     def _put(self, socket):
@@ -107,12 +105,32 @@ class BaseFactory:
 
     @classmethod
     @asyncio.coroutine
-    def connect(cls, uri='ws://localhost:8182/', manager=None, **kwargs):
+    def connect(cls):
         raise NotImplementedError
 
     @property
     def factory(self):
         return self
+
+
+class AiohttpFactory(BaseFactory):
+
+    @classmethod
+    @asyncio.coroutine
+    def connect(cls, uri='ws://localhost:8182/', manager=None, protocols=(),
+                connector=None, autoclose=False, autoping=True, loop=None):
+        if manager:
+            loop = loop or manager._loop
+        try:
+            socket = yield from aiohttp.ws_connect(uri, protocols=protocols,
+                connector=connector, autoclose=autoclose, autoping=autoping,
+                loop=loop)
+        except aiohttp.WSServerHandshakeError as e:
+            raise SocketClientError(e.message)
+        return AiohttpConnection(socket, manager)
+
+
+aiohttp_factory = AiohttpFactory
 
 
 class WebsocketsFactory(BaseFactory):
@@ -127,18 +145,6 @@ class WebsocketsFactory(BaseFactory):
 websockets_factory = WebsocketsFactory
 
 
-class AiohttpFactory(BaseFactory):
-
-    @classmethod
-    @asyncio.coroutine
-    def connect(cls, uri='ws://localhost:8182/', manager=None, **kwargs):
-        socket = yield from aiohttp.ws_connect(uri, **kwargs)
-        return AiohttpConnection(socket, manager)
-
-
-aiohttp_factory = AiohttpFactory
-
-
 class BaseConnection:
 
     def __init__(self, socket, manager=None):
@@ -148,9 +154,10 @@ class BaseConnection:
     def __nonzero__(self):
         return bool(self.socket)
 
-    def close(self, destroy=False):
+    def close(self):
         if self.manager:
-            self.manager.remove_active_conn(self)
+            if self in self.manager.active_conns:
+                self.manager.remove_active_conn(self)
 
     def __str__(self):
         return repr(self.socket)
@@ -168,6 +175,66 @@ class BaseConnection:
         raise NotImplementedError
 
 
+class AiohttpConnection(BaseConnection):
+
+    @property
+    def open(self):
+        return not self.socket.closed
+
+    @asyncio.coroutine
+    def send(self, msg, binary=True):
+        if binary:
+            method = self.socket.send_bytes
+        else:
+            method = self.socket.send_str
+        try:
+            method(msg)
+        except RuntimeError:
+            # Socket closed.
+            self.close()
+            raise
+        except TypeError:
+            # Bytes/string input error.
+            self.close()
+            raise
+
+    @asyncio.coroutine
+    def recv(self):
+        while True:
+            try:
+                message = yield from self.socket.receive()
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                self.close()
+                raise
+            except RuntimeError:
+                self.close()
+                raise
+            if message.tp == aiohttp.MsgType.binary:
+                return message.data.decode()
+            elif message.tp == aiohttp.MsgType.text:
+                return message.data.strip()
+            elif msg.tp == aiohttp.MsgType.ping:
+                conn_logger.info("Ping received.")
+                ws.pong()
+                conn_logger.info("Sent pong.")
+            elif msg.tp == aiohttp.MsgType.pong:
+                conn_logger.info('Pong received')
+            else:
+                try:
+                    if message.tp == aiohttp.MsgType.close:
+                        try:
+                            yield from self.socket.close()
+                        finally:
+                            conn_logger.warn("Socket connection closed by server.")
+                    elif message.tp == aiohttp.MsgType.error:
+                        raise SocketClientError(self.socket.exception())
+                    elif message.tp == aiohttp.MsgType.closed:
+                        raise SocketClientError("Socket closed.")
+                    break
+                finally:
+                    self.close()
+
+
 class WebsocketsConnection(BaseConnection):
 
     @property
@@ -180,20 +247,5 @@ class WebsocketsConnection(BaseConnection):
 
     @asyncio.coroutine
     def recv(self):
-        return (yield from self.socket.recv())
-
-
-class AiohttpConnection(BaseConnection):
-
-    @property
-    def open(self):
-        return not self.socket.closed
-
-    @asyncio.coroutine
-    def send(self, msg):
-        self.socket.send_bytes(msg)
-
-    @asyncio.coroutine
-    def recv(self):
-        message = yield from self.socket.receive()
-        return message.data
+        message = yield from self.socket.recv()
+        return message.decode()

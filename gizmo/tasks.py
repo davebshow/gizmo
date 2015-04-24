@@ -1,10 +1,6 @@
 import asyncio
 import itertools
-import logging
-
-
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+from .log import task_logger, INFO
 
 
 def async(coro, *args, **kwargs):
@@ -23,20 +19,15 @@ def chord(itrbl, callback, **kwargs):
     return Chord(itrbl, callback, **kwargs)
 
 
-class BaseTask: pass  # Common init + result call exc git
-
-
 class Task:
 
     def __init__(self, coro, *args, **kwargs):
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
         self.coro = self.set_raise_result(coro(*args, **kwargs))
         self._result = None
-        verbose = kwargs.get("verbose", True)
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.subtasks = None
+        verbose = kwargs.get("verbose", False)
         if verbose:
-            self.logger.setLevel(logging.INFO)
+            task_logger.setLevel(INFO)
 
     @property
     def result(self):
@@ -44,18 +35,15 @@ class Task:
 
     def __call__(self):
         self.task = asyncio.async(self.coro, loop=self.loop)
-        self.logger.info("Task scheduled: {} with subtasks: {}".format(self,
-            self.subtasks))
+        task_logger.info("Task scheduled: {}".format(self))
         return self.task
 
     def execute(self):
         if not hasattr(self, "task"):
             self.__call__()
-        self.logger.info("Execute task: {} with subtasks: {}".format(self.loop,
-            self.subtasks))
+        task_logger.info("Execute task: {}".format(self.loop))
         self.loop.run_until_complete(self.task)
-        self.logger.info("Completed task: {} with subtasks: {}".format(self.task,
-            self.subtasks))
+        task_logger.info("Completed task: {}".format(self.task))
         return self._result
 
     @asyncio.coroutine
@@ -81,12 +69,9 @@ class Group(Task):
             return_when=asyncio.FIRST_EXCEPTION)
         self.coro = self.set_raise_result(coro)
         self._result = None
-        verbose = kwargs.get("verbose", True)
-        self.subtasks = args
-        self.logger = logging.getLogger(self.__class__.__name__)
+        verbose = kwargs.get("verbose", False)
         if verbose:
-            self.logger.setLevel(logging.INFO)
-
+            task_logger.setLevel(INFO)
 
     @asyncio.coroutine
     def set_raise_result(self, tasks):
@@ -107,21 +92,16 @@ class Chain(Task):
             task_queue.put_nowait(t)
         self.coro = self.dequeue(task_queue)
         self._result = None
-        verbose = kwargs.get("verbose", True)
-        self.subtasks = args
-        self.logger = logging.getLogger(self.__class__.__name__)
+        verbose = kwargs.get("verbose", False)
         if verbose:
-            self.logger.setLevel(logging.INFO)
+            task_logger.setLevel(INFO)
 
     @asyncio.coroutine
     def dequeue(self, queue):
         self._result = []
         while not queue.empty():
             t = queue.get_nowait()
-            if asyncio.iscoroutine(t):
-                result = yield from t
-            else:
-                result = yield from t()
+            result = yield from t()
             self._result.append(result)
         return self._result
 
@@ -130,24 +110,12 @@ class Chord(Chain):
 
     def __init__(self, itrbl, callback, **kwargs):
         self.loop = kwargs.get("loop", "") or asyncio.get_event_loop()
-        # Replace with group task.
-        tasks = asyncio.wait([t.coro for t in itrbl], loop=self.loop,
-            return_when=asyncio.FIRST_EXCEPTION)
-        tasks = self.get_raise_result(tasks)
+        g = Group(itrbl)
         task_queue = asyncio.Queue()
-        task_queue.put_nowait(tasks)
+        task_queue.put_nowait(g)
         task_queue.put_nowait(callback)
         self.coro = self.dequeue(task_queue)
         self._result = None
-        verbose = kwargs.get("verbose", True)
-        self.subtasks = set([itrbl, callback])
-        self.logger = logging.getLogger(self.__class__.__name__)
+        verbose = kwargs.get("verbose", False)
         if verbose:
-            self.logger.setLevel(logging.INFO)
-
-    @asyncio.coroutine
-    def get_raise_result(self, tasks):
-        done, pending = yield from tasks
-        result = [f.result() for f in done]
-        result = result
-        return result
+            task_logger.setLevel(INFO)

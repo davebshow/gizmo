@@ -7,7 +7,7 @@ import itertools
 import websockets
 import unittest
 from gizmo import (AsyncGremlinClient, async, group, chain, chord, RequestError,
-    GremlinServerError, SocketError, ConnectionManager, aiohttp_factory,
+    GremlinServerError, SocketClientError, ConnectionManager, aiohttp_factory,
     websockets_factory)
 
 
@@ -267,12 +267,12 @@ class AsyncGremlinClientTests(unittest.TestCase):
             results = []
             websocket = yield from self.gc.send("x + x", bindings={"x": 4})
             while True:
-                f = yield from self.gc._receive(websocket)
+                f = yield from self.gc.recv(websocket)
                 if f is None:
                     break
                 else:
                     results.append(f)
-            self.assertEqual(results[0][0], 8)
+            self.assertEqual(results[0]["result"]["data"][0], 8)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(recv_coro())
 
@@ -292,7 +292,7 @@ class AsyncGremlinClientTests(unittest.TestCase):
 class ConnectionManagerTests(unittest.TestCase):
 
     def setUp(self):
-        self.manager = ConnectionManager(max_conn=2, timeout=1)
+        self.manager = ConnectionManager(max_conn=2, timeout=1, factory=websockets_factory)
         self.loop = asyncio.get_event_loop()
 
     def test_connect(self):
