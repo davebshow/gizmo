@@ -186,13 +186,13 @@ class AiohttpConnection(BaseConnection):
         return not self.socket.closed
 
     @asyncio.coroutine
-    def send(self, msg, binary=True):
+    def send(self, message, binary=True):
         if binary:
             method = self.socket.send_bytes
         else:
             method = self.socket.send_str
         try:
-            method(msg)
+            method(message)
         except RuntimeError:
             # Socket closed.
             self.close()
@@ -217,12 +217,12 @@ class AiohttpConnection(BaseConnection):
                 return message.data.decode()
             elif message.tp == aiohttp.MsgType.text:
                 return message.data.strip()
-            elif msg.tp == aiohttp.MsgType.ping:
-                conn_logger.info("Ping received.")
+            elif message.tp == aiohttp.MsgType.ping:
+                conn_logger.warn("Ping received.")
                 ws.pong()
-                conn_logger.info("Sent pong.")
-            elif msg.tp == aiohttp.MsgType.pong:
-                conn_logger.info('Pong received')
+                conn_logger.warn("Sent pong.")
+            elif message.tp == aiohttp.MsgType.pong:
+                conn_logger.warn('Pong received')
             else:
                 try:
                     if message.tp == aiohttp.MsgType.close:
