@@ -226,10 +226,8 @@ class AiohttpConnection(BaseConnection):
             else:
                 try:
                     if message.tp == aiohttp.MsgType.close:
-                        try:
-                            yield from self.socket.close()
-                        finally:
-                            conn_logger.warn("Socket connection closed by server.")
+                        conn_logger.warn("Socket connection closed by server.")
+                        yield from self.socket.close()
                     elif message.tp == aiohttp.MsgType.error:
                         raise SocketClientError(self.socket.exception())
                     elif message.tp == aiohttp.MsgType.closed:
