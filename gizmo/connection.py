@@ -24,7 +24,7 @@ except ImportError:
 class ConnectionManager:
 
     def __init__(self, uri='ws://localhost:8182/', factory=None, max_conn=10,
-                 max_retries=10, timeout=None, loop=None, verbose=False):
+                 max_retries=10, timeout=None, loop=None, verbose=True):
         """
         Very simple manager for socket connections. Basically just creates and
         loans out connected sockets.
@@ -85,6 +85,9 @@ class ConnectionManager:
             try:
                 socket = yield from self.factory.connect(uri, manager=self,
                     loop=loop)
+            except:
+                raise
+            else:
                 conn_logger.info("New connection on socket: {} at {}".format(
                     socket, uri))
             finally:
