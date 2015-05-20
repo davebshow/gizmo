@@ -1,4 +1,5 @@
-# gizmo 0.1.11
+# gizmo 0.1.11 - DEPRECATED!!! WILL BE OFFICIALLY RETIRED UPON RELEASE OF GREMLIN SERVER 3.0.0 M9
+# PLEASE TRY [aiogremlin](https://pypi.python.org/pypi/aiogremlin) INSTEAD
 
 **API BREAKING CHANGES HAVE OCCURRED BETWEEN 0.1.7 AND 0.1.9 - Full API documented below.**
 
